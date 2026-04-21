@@ -1,0 +1,6 @@
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS last_login_user_agent VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS last_login_location VARCHAR(120),
+    ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
+
