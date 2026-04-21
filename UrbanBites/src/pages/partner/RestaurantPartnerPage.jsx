@@ -269,7 +269,7 @@ export default function RestaurantPartnerPage() {
       fd.append('city', location.city);
       fd.append('openNow', location.openNow);
 
-      await restaurantApi.createRestaurant(fd);
+      await restaurantApi.createMyRestaurant(fd);
       setStep(8);
     } catch (err) {
       setValidationErrors({ submit: err.response?.data?.message || 'Failed to create restaurant' });
