@@ -23,6 +23,7 @@ import com.prajjwal.UrbanBites.entity.AdminCouponCampaign;
 import com.prajjwal.UrbanBites.entity.AdminDisputeCase;
 import com.prajjwal.UrbanBites.entity.AdminPayoutControl;
 import com.prajjwal.UrbanBites.entity.AdminReviewModeration;
+import com.prajjwal.UrbanBites.entity.DeliveryAgentProfile;
 import com.prajjwal.UrbanBites.entity.DispatchAssignment;
 import com.prajjwal.UrbanBites.entity.Order;
 import com.prajjwal.UrbanBites.entity.Payment;
@@ -934,19 +935,23 @@ public class AdminService {
         agent.setApprovalRejectionReason(approved ? null : normalizedReason);
         User updated = userRepository.save(agent);
 
-        // Also update delivery agent profile verified flag
-        deliveryAgentProfileRepository.findByUserId(agent.getId()).ifPresent(profile -> {
-            profile.setVerified(approved);
-            if (!approved) {
-                profile.setApprovalRejectionReason(normalizedReason);
-                profile.setOnline(false);
-                profile.setAvailable(false);
-                profile.setActiveShift(false);
-            } else {
-                profile.setApprovalRejectionReason(null);
-            }
-            deliveryAgentProfileRepository.save(profile);
-        });
+        // Also update delivery agent profile verified flag (create profile if it doesn't exist yet)
+        DeliveryAgentProfile profile = deliveryAgentProfileRepository.findByUserId(agent.getId())
+                .orElseGet(() -> {
+                    DeliveryAgentProfile newProfile = new DeliveryAgentProfile();
+                    newProfile.setUser(agent);
+                    return newProfile;
+                });
+        profile.setVerified(approved);
+        if (!approved) {
+            profile.setApprovalRejectionReason(normalizedReason);
+            profile.setOnline(false);
+            profile.setAvailable(false);
+            profile.setActiveShift(false);
+        } else {
+            profile.setApprovalRejectionReason(null);
+        }
+        deliveryAgentProfileRepository.save(profile);
 
         audit(
                 "DELIVERY_AGENT_APPROVAL_" + (approved ? "APPROVED" : "REJECTED"),
