@@ -7,7 +7,8 @@ public record CreateMenuItemRequest(
         String description,
         BigDecimal price,
         boolean veg,
-        boolean available
+        boolean available,
+        String category
 ) {
 }
 

@@ -334,6 +334,12 @@ public class RestaurantService {
     }
 
     private RestaurantResponse toResponse(Restaurant restaurant, Double distanceKm) {
+        List<String> categories = menuItemRepository.findByRestaurantIdAndAvailableTrueOrderByIdDesc(restaurant.getId())
+                .stream()
+                .map(MenuItem::getCategory)
+                .filter(c -> c != null && !c.isBlank())
+                .distinct()
+                .toList();
         return new RestaurantResponse(
                 restaurant.getId(),
                 restaurant.getName(),
@@ -347,7 +353,8 @@ public class RestaurantService {
                 restaurant.isActive(),
                 restaurant.getAvgRating().setScale(2, RoundingMode.HALF_UP),
                 restaurant.getRatingCount(),
-                distanceKm
+                distanceKm,
+                categories
         );
     }
 

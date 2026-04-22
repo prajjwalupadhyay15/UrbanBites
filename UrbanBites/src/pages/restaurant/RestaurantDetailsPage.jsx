@@ -28,6 +28,7 @@ export default function RestaurantDetailsPage() {
   const navigate = useNavigate();
   const [filterVeg, setFilterVeg] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [priceSort, setPriceSort] = useState(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -62,16 +63,26 @@ export default function RestaurantDetailsPage() {
 
   const categories = [...new Set(menuItems.map((i) => i.category || 'Menu'))];
 
-  const filteredItems = menuItems.filter((item) => {
+  let filteredItems = menuItems.filter((item) => {
     if (filterVeg === true && !item.veg) return false;
     if (filterVeg === false && item.veg) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      if (!item.name.toLowerCase().includes(q) && !(item.description || '').toLowerCase().includes(q))
+      if (
+        !item.name.toLowerCase().includes(q) && 
+        !(item.description || '').toLowerCase().includes(q) &&
+        !(item.category || '').toLowerCase().includes(q)
+      )
         return false;
     }
     return true;
   });
+
+  if (priceSort === 'lowToHigh') {
+    filteredItems.sort((a, b) => Number(a.price) - Number(b.price));
+  } else if (priceSort === 'highToLow') {
+    filteredItems.sort((a, b) => Number(b.price) - Number(a.price));
+  }
 
   const vegCount = menuItems.filter((i) => i.veg).length;
   const nonVegCount = menuItems.filter((i) => !i.veg).length;
@@ -179,6 +190,19 @@ export default function RestaurantDetailsPage() {
                 {label}
               </button>
             ))}
+          </div>
+
+          {/* Sort */}
+          <div className="flex bg-white border border-[#EADDCD] rounded-2xl p-1.5 shadow-sm">
+            <select
+              value={priceSort || ''}
+              onChange={(e) => setPriceSort(e.target.value || null)}
+              className="bg-transparent text-[#2A0800] text-sm font-bold outline-none px-2 py-1 cursor-pointer"
+            >
+              <option value="">Sort by Relevance</option>
+              <option value="lowToHigh">Price: Low to High</option>
+              <option value="highToLow">Price: High to Low</option>
+            </select>
           </div>
 
           {/* Search */}

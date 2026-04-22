@@ -10,7 +10,8 @@ public record MenuItemResponse(
         BigDecimal price,
         String imagePath,
         boolean veg,
-        boolean available
+        boolean available,
+        String category
 ) {
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { authApi } from '../../api/authApi';
@@ -25,6 +25,7 @@ L.Icon.Default.mergeOptions({
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function LocationMarker({ position, onPositionChange }) {
+  const markerRef = useRef(null);
   const map = useMapEvents({
     click(e) {
       if (onPositionChange) onPositionChange(e.latlng.lat, e.latlng.lng);
@@ -36,7 +37,29 @@ function LocationMarker({ position, onPositionChange }) {
       map.setView([position.lat, position.lng], map.getZoom(), { animate: true });
     }
   }, [position?.lat, position?.lng, map]);
-  return position?.lat && position?.lng ? <Marker position={[position.lat, position.lng]} /> : null;
+
+  const eventHandlers = useMemo(
+    () => ({
+      dragend() {
+        const marker = markerRef.current;
+        if (marker != null) {
+          const latlng = marker.getLatLng();
+          if (onPositionChange) onPositionChange(latlng.lat, latlng.lng);
+          map.flyTo(latlng, map.getZoom());
+        }
+      },
+    }),
+    [onPositionChange, map],
+  );
+
+  return position?.lat && position?.lng ? (
+    <Marker 
+      draggable={true}
+      eventHandlers={eventHandlers}
+      position={[position.lat, position.lng]}
+      ref={markerRef} 
+    />
+  ) : null;
 }
 
 function OtpDigitInput({ value, onChange, onKeyDown, inputRef }) {
@@ -136,11 +159,15 @@ export default function RestaurantPartnerPage() {
     streetArea: '',
     landmark: '',
     city: '',
+    pincode: '',
     openNow: true,
   });
 
   const [validationErrors, setValidationErrors] = useState({});
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [addressQuery, setAddressQuery] = useState('');
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
 
   // (auth store destructured above)
 
@@ -251,18 +278,87 @@ export default function RestaurantPartnerPage() {
 
   const handleMapPinDrag = (lat, lng) => setLocation(prev => ({ ...prev, latitude: lat, longitude: lng }));
 
+  const handleProceedToMap = async () => {
+    if (!validateLocation()) return;
+    
+    if (location.latitude === 28.6139 && location.longitude === 77.2090) {
+      setIsGeocoding(true);
+      try {
+        const fullAddr = `${location.buildingName || ''} ${location.addressLine}, ${location.streetArea}, ${location.city}, ${location.pincode || ''}, India`;
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddr)}&format=json&limit=1`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+          setLocation(prev => ({
+            ...prev,
+            latitude: parseFloat(data[0].lat),
+            longitude: parseFloat(data[0].lon)
+          }));
+        }
+      } catch (e) {
+        console.error("Geocoding failed", e);
+      } finally {
+        setIsGeocoding(false);
+      }
+    }
+    setStep(7);
+  };
+
+  useEffect(() => {
+    if (!addressQuery || addressQuery.length < 3) {
+      setAddressSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearchingAddress(true);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addressQuery)}&format=json&addressdetails=1&countrycodes=in&limit=5`);
+        const data = await res.json();
+        setAddressSuggestions(data);
+      } catch (err) {
+        console.error("Failed to fetch address suggestions", err);
+      } finally {
+        setIsSearchingAddress(false);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [addressQuery]);
+
+  const handleSelectSuggestion = (suggestion) => {
+    const { address } = suggestion;
+    const pincode = address?.postcode || '';
+    const city = address?.city || address?.town || address?.county || '';
+    const streetArea = address?.suburb || address?.neighbourhood || address?.road || '';
+    const addressLine = suggestion.display_name.split(',')[0];
+
+    setLocation(prev => ({
+      ...prev,
+      latitude: parseFloat(suggestion.lat),
+      longitude: parseFloat(suggestion.lon),
+      addressLine: addressLine,
+      streetArea: streetArea,
+      city: city,
+      pincode: pincode
+    }));
+    setAddressQuery('');
+    setAddressSuggestions([]);
+  };
+
   const submitRestaurant = async (e) => {
     e.preventDefault();
     if (!validateRestaurant() || !validateLocation()) return;
     setIsCreatingRestaurant(true);
     try {
+      const fullAddressLine = location.pincode 
+        ? `${location.addressLine}, Pincode: ${location.pincode}` 
+        : location.addressLine;
+
       const fd = new FormData();
       fd.append('name', restaurantName);
       fd.append('description', description);
       if (imageFile) fd.append('image', imageFile);
       fd.append('latitude', location.latitude);
       fd.append('longitude', location.longitude);
-      fd.append('addressLine', location.addressLine);
+      fd.append('addressLine', fullAddressLine);
       if (location.buildingName) fd.append('buildingName', location.buildingName);
       if (location.streetArea) fd.append('streetArea', location.streetArea);
       if (location.landmark) fd.append('landmark', location.landmark);
@@ -468,16 +564,52 @@ export default function RestaurantPartnerPage() {
                   </div>
                   <button onClick={() => setStep(5)} className="text-sm font-bold text-[#8E7B73] hover:text-[#780116] flex items-center gap-1 transition-colors"><ArrowLeft size={16} /> Back</button>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-4 relative">
+                  {/* Address Auto-suggest */}
+                  <div className="relative z-50">
+                    <div className="relative">
+                      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8E7B73]" size={18} />
+                      <input
+                        type="text"
+                        placeholder="Search for your building, street or area..."
+                        value={addressQuery}
+                        onChange={(e) => setAddressQuery(e.target.value)}
+                        className="w-full bg-white border-2 border-[#EADDCD] text-[#2A0800] rounded-xl py-3 pl-12 pr-4 outline-none focus:border-[#F7B538] transition-all font-bold text-sm shadow-sm"
+                      />
+                      {isSearchingAddress && (
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                          <span className="w-4 h-4 border-2 border-[#F7B538] border-t-transparent rounded-full animate-spin inline-block" />
+                        </div>
+                      )}
+                    </div>
+                    {addressSuggestions.length > 0 && (
+                      <div className="absolute top-full mt-2 w-full bg-white border border-[#EADDCD] rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                        {addressSuggestions.map((s, idx) => (
+                          <div 
+                            key={idx}
+                            onClick={() => handleSelectSuggestion(s)}
+                            className="p-3 border-b border-[#EADDCD] last:border-none hover:bg-[#FDF9F1] cursor-pointer transition-colors"
+                          >
+                            <p className="text-sm font-bold text-[#2A0800] truncate">{s.display_name.split(',')[0]}</p>
+                            <p className="text-xs font-medium text-[#8E7B73] truncate">{s.display_name}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <LightInput icon={MapPin} name="addressLine" type="text" label="Address Line 1 *" placeholder="e.g. Shop 42, Ground Floor" value={location.addressLine} error={validationErrors.addressLine} onChange={(e) => { setLocation(p => ({ ...p, addressLine: e.target.value })); setValidationErrors(v => ({ ...v, addressLine: '' })); }} />
                   <LightInput icon={Building2} name="buildingName" type="text" label="Building / Mall (optional)" placeholder="e.g. Phoenix Mall" value={location.buildingName} onChange={(e) => setLocation(p => ({ ...p, buildingName: e.target.value }))} />
                   <div className="grid grid-cols-2 gap-4">
                     <LightInput icon={Milestone} name="streetArea" type="text" label="Street / Area *" placeholder="e.g. MG Road" value={location.streetArea} error={validationErrors.streetArea} onChange={(e) => { setLocation(p => ({ ...p, streetArea: e.target.value })); setValidationErrors(v => ({ ...v, streetArea: '' })); }} />
                     <LightInput icon={Globe} name="city" type="text" label="City *" placeholder="e.g. New Delhi" value={location.city} error={validationErrors.city} onChange={(e) => { setLocation(p => ({ ...p, city: e.target.value })); setValidationErrors(v => ({ ...v, city: '' })); }} />
                   </div>
-                  <LightInput icon={Home} name="landmark" type="text" label="Landmark (optional)" placeholder="e.g. Near Metro Station" value={location.landmark} onChange={(e) => setLocation(p => ({ ...p, landmark: e.target.value }))} />
-                  <button type="button" onClick={() => { if (!validateLocation()) return; setStep(7); }} className="w-full h-14 rounded-2xl bg-[#780116] text-white font-black text-lg shadow-premium hover:-translate-y-1 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group mt-2">
-                    Next: Pin on Map <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <LightInput icon={Home} name="landmark" type="text" label="Landmark (optional)" placeholder="e.g. Near Metro Station" value={location.landmark} onChange={(e) => setLocation(p => ({ ...p, landmark: e.target.value }))} />
+                    <LightInput icon={MapPin} name="pincode" type="text" label="Pincode" placeholder="e.g. 110001" value={location.pincode} onChange={(e) => setLocation(p => ({ ...p, pincode: e.target.value }))} />
+                  </div>
+                  <button type="button" onClick={handleProceedToMap} disabled={isGeocoding} className="w-full h-14 rounded-2xl bg-[#780116] text-white font-black text-lg shadow-premium hover:-translate-y-1 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group mt-2 disabled:opacity-50">
+                    {isGeocoding ? 'Locating...' : 'Next: Pin on Map'} <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                   </button>
                 </div>
               </motion.div>

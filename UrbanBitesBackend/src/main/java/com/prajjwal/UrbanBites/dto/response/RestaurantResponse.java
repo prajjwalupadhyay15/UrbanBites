@@ -1,6 +1,7 @@
 package com.prajjwal.UrbanBites.dto.response;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record RestaurantResponse(
         Long id,
@@ -15,7 +16,8 @@ public record RestaurantResponse(
         boolean active,
         BigDecimal avgRating,
         Integer ratingCount,
-        Double distanceKm
+        Double distanceKm,
+        List<String> categories
 ) {
 }
 

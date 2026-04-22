@@ -44,6 +44,9 @@ public class MenuItem {
     @Column(name = "is_available", nullable = false)
     private boolean available = true;
 
+    @Column(length = 100)
+    private String category;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -77,5 +80,7 @@ public class MenuItem {
     public void setVeg(boolean veg) { this.veg = veg; }
     public boolean isAvailable() { return available; }
     public void setAvailable(boolean available) { this.available = available; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 }
 

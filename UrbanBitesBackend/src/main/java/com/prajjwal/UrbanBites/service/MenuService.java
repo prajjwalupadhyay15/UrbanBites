@@ -39,7 +39,7 @@ public class MenuService {
         Restaurant restaurant = restaurantService.getOwnedRestaurant(currentEmail, restaurantId);
         MenuItem item = new MenuItem();
         item.setRestaurant(restaurant);
-        apply(item, request.name(), request.description(), request.price(), request.veg(), request.available(), imagePath);
+        apply(item, request.name(), request.description(), request.price(), request.veg(), request.available(), request.category(), imagePath);
         return toResponse(menuItemRepository.save(item));
     }
 
@@ -55,7 +55,7 @@ public class MenuService {
         MenuItem item = menuItemRepository.findByIdAndRestaurantId(menuItemId, restaurantId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Menu item not found"));
         String existingImagePath = item.getImagePath();
-        apply(item, request.name(), request.description(), request.price(), request.veg(), request.available(), imagePath);
+        apply(item, request.name(), request.description(), request.price(), request.veg(), request.available(), request.category(), imagePath);
         MenuItem saved = menuItemRepository.save(item);
         if (imagePath != null && existingImagePath != null && !existingImagePath.equals(saved.getImagePath())) {
             imageStorageService.deleteImage(existingImagePath);
@@ -96,6 +96,7 @@ public class MenuService {
             java.math.BigDecimal price,
             boolean veg,
             boolean available,
+            String category,
             String imagePath
     ) {
         if (name == null || name.isBlank()) {
@@ -109,6 +110,7 @@ public class MenuService {
         item.setPrice(price);
         item.setVeg(veg);
         item.setAvailable(available);
+        item.setCategory(blankToNull(category));
         if (imagePath != null) {
             item.setImagePath(imagePath);
         }
@@ -126,7 +128,8 @@ public class MenuService {
                 item.getPrice(),
                 item.getImagePath(),
                 item.isVeg(),
-                item.isAvailable()
+                item.isAvailable(),
+                item.getCategory()
         );
     }
 

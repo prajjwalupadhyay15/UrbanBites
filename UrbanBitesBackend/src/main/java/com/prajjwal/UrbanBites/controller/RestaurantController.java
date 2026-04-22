@@ -105,10 +105,11 @@ public class RestaurantController {
             @RequestParam @NotNull @DecimalMin(value = "0.0", inclusive = false) BigDecimal price,
             @RequestParam boolean veg,
             @RequestParam boolean available,
+            @RequestParam(required = false) String category,
             @RequestParam("image") MultipartFile image
     ) {
         String imagePath = imageStorageService.saveMenuItemImage(image);
-        CreateMenuItemRequest request = new CreateMenuItemRequest(name, description, price, veg, available);
+        CreateMenuItemRequest request = new CreateMenuItemRequest(name, description, price, veg, available, category);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(menuService.createMenuItem(principal.getName(), restaurantId, request, imagePath));
     }
@@ -124,10 +125,11 @@ public class RestaurantController {
             @RequestParam @NotNull @DecimalMin(value = "0.0", inclusive = false) BigDecimal price,
             @RequestParam boolean veg,
             @RequestParam boolean available,
+            @RequestParam(required = false) String category,
             @RequestParam(value = "image", required = false) MultipartFile image
     ) {
         String imagePath = image == null || image.isEmpty() ? null : imageStorageService.saveMenuItemImage(image);
-        UpdateMenuItemRequest request = new UpdateMenuItemRequest(name, description, price, veg, available);
+        UpdateMenuItemRequest request = new UpdateMenuItemRequest(name, description, price, veg, available, category);
         return ResponseEntity.ok(menuService.updateMenuItem(principal.getName(), restaurantId, menuItemId, request, imagePath));
     }
 

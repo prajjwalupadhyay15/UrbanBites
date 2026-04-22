@@ -173,7 +173,11 @@ function MenuItemForm({ restaurantId, editItem, onClose, onSuccess }) {
   const fileRef = useRef();
   const qc = useQueryClient();
 
-  const CATEGORIES = ['Starters', 'Main Course', 'Breads', 'Rice & Biryani', 'Desserts', 'Beverages', 'Sides'];
+  const CATEGORIES = [
+    'Beverages', 'Breads', 'Burger', 'Chinese', 'Desserts', 'Healthy', 
+    'Main Course', 'North Indian', 'Pasta', 'Pizza', 'Rice & Biryani', 
+    'Sides', 'South Indian', 'Starters', 'Street Food'
+  ];
 
   const createMutation = useMutation({
     mutationFn: (fd) => restaurantApi.createMenuItem(restaurantId, fd),

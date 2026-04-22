@@ -82,13 +82,12 @@ export default function HomePage() {
   });
 
   const filtered = restaurants.filter((r) => {
+    const haystack = `${r.name} ${r.description || ''} ${r.categories?.join(' ') || ''}`.toLowerCase();
     if (selectedCategory) {
-      const haystack = `${r.name} ${r.description || ''}`.toLowerCase();
       if (!haystack.includes(selectedCategory.toLowerCase())) return false;
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      const haystack = `${r.name} ${r.description || ''}`.toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
