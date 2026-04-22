@@ -16,6 +16,7 @@ import com.prajjwal.UrbanBites.entity.DispatchEvent;
 import com.prajjwal.UrbanBites.entity.Order;
 import com.prajjwal.UrbanBites.entity.OrderItem;
 import com.prajjwal.UrbanBites.entity.User;
+import com.prajjwal.UrbanBites.enums.ApprovalStatus;
 import com.prajjwal.UrbanBites.enums.DispatchAssignmentStatus;
 import com.prajjwal.UrbanBites.enums.NotificationType;
 import com.prajjwal.UrbanBites.enums.OrderStatus;
@@ -308,8 +309,15 @@ public class DispatchService {
                 });
 
         // Prevent going online if not verified (pending admin approval)
+        // Self-heal: if User.approvalStatus is APPROVED but profile.verified is stale, auto-correct
         if (online && !profile.isVerified()) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "Your account is pending admin approval. You cannot go online yet.");
+            if (ApprovalStatus.APPROVED.equals(agent.getApprovalStatus())) {
+                profile.setVerified(true);
+                profile.setApprovalRejectionReason(null);
+                log.info("Auto-corrected verified flag for agent userId={}", agent.getId());
+            } else {
+                throw new ApiException(HttpStatus.FORBIDDEN, "Your account is pending admin approval. You cannot go online yet.");
+            }
         }
 
         boolean normalizedAvailable = online && available;
