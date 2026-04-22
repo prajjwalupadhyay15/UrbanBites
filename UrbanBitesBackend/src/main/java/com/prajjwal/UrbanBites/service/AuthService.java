@@ -11,6 +11,7 @@ import com.prajjwal.UrbanBites.dto.request.RegisterRequest;
 import com.prajjwal.UrbanBites.dto.response.OtpResponse;
 import com.prajjwal.UrbanBites.dto.response.AuthResponse;
 import com.prajjwal.UrbanBites.dto.response.UserProfileResponse;
+import com.prajjwal.UrbanBites.entity.DeliveryAgentProfile;
 import com.prajjwal.UrbanBites.entity.RefreshToken;
 import com.prajjwal.UrbanBites.entity.User;
 import com.prajjwal.UrbanBites.enums.ApprovalStatus;
@@ -18,6 +19,7 @@ import com.prajjwal.UrbanBites.enums.NotificationType;
 import com.prajjwal.UrbanBites.enums.OtpPurpose;
 import com.prajjwal.UrbanBites.enums.Role;
 import com.prajjwal.UrbanBites.exception.ApiException;
+import com.prajjwal.UrbanBites.repository.DeliveryAgentProfileRepository;
 import com.prajjwal.UrbanBites.repository.RefreshTokenRepository;
 import com.prajjwal.UrbanBites.repository.UserRepository;
 import com.prajjwal.UrbanBites.security.JwtService;
@@ -43,6 +45,7 @@ public class AuthService {
     private final EmailSender emailSender;
     private final NotificationService notificationService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final DeliveryAgentProfileRepository deliveryAgentProfileRepository;
     private final TokenRevocationService tokenRevocationService;
 
     private static final DateTimeFormatter LOGIN_TIME_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a");
@@ -55,6 +58,7 @@ public class AuthService {
                        EmailSender emailSender,
                        NotificationService notificationService,
                        RefreshTokenRepository refreshTokenRepository,
+                       DeliveryAgentProfileRepository deliveryAgentProfileRepository,
                        TokenRevocationService tokenRevocationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -64,6 +68,7 @@ public class AuthService {
         this.emailSender = emailSender;
         this.notificationService = notificationService;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.deliveryAgentProfileRepository = deliveryAgentProfileRepository;
         this.tokenRevocationService = tokenRevocationService;
     }
 
@@ -98,6 +103,14 @@ public class AuthService {
         }
 
         User saved = userRepository.save(user);
+
+        // Create delivery agent profile at registration time so admin approval can set verified=true
+        if (Role.DELIVERY_AGENT.equals(saved.getRole())) {
+            DeliveryAgentProfile agentProfile = new DeliveryAgentProfile();
+            agentProfile.setUser(saved);
+            agentProfile.setVerified(false);
+            deliveryAgentProfileRepository.save(agentProfile);
+        }
         if (saved.getPhone() != null) {
             otpService.createPhoneOtp(saved.getEmail(), saved.getPhone(), OtpPurpose.PHONE_VERIFICATION);
         } else if (isEmailableAddress(saved.getEmail())) {
