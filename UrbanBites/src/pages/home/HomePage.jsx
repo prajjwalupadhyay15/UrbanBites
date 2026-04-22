@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { restaurantApi } from '../../api/restaurantApi';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import RestaurantCard from '../../components/specific/RestaurantCard';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { Search, MapPin, ChevronRight, Star, Clock, Sparkles, ArrowRight, Flame, Zap } from 'lucide-react';
@@ -70,7 +70,7 @@ function HeroMetrics() {
 export default function HomePage() {
   const { lat, lng, locationName } = useLocationStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(null);
+  const navigate = useNavigate();
   
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 1000], [0, 150]);
@@ -81,17 +81,12 @@ export default function HomePage() {
     queryFn: () => restaurantApi.discover({ latitude: lat, longitude: lng, radiusKm: 30 }),
   });
 
-  const filtered = restaurants.filter((r) => {
-    const haystack = `${r.name} ${r.description || ''} ${r.categories?.join(' ') || ''}`.toLowerCase();
-    if (selectedCategory) {
-      if (!haystack.includes(selectedCategory.toLowerCase())) return false;
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
-  });
+  };
 
   return (
     <div className="min-h-screen bg-[#FFFCF5] text-[#2A0800] overflow-x-hidden">
@@ -134,13 +129,12 @@ export default function HomePage() {
           </motion.p>
 
           {/* Chunky, Playful Search Bar */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-            className="flex flex-col sm:flex-row gap-3 w-full max-w-2xl mx-auto relative z-20">
-            <div className="relative flex-1">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="w-full max-w-2xl mx-auto px-4 z-10">
+            <form onSubmit={handleSearchSubmit} className="relative group">
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-[#F7B538]" size={24} />
               <input type="text" placeholder="Search for pizza, burgers, thali..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                 className="w-full bg-white text-[#2A0800] rounded-full py-5 pl-16 pr-6 outline-none focus:ring-8 focus:ring-white/30 transition-all font-bold placeholder:text-[#AFA49F] text-lg shadow-xl" />
-            </div>
+            </form>
           </motion.div>
 
           {/* Beautiful Metrics / Badges */}
@@ -169,13 +163,9 @@ export default function HomePage() {
           {CATEGORIES.map((cat, i) => (
             <motion.button key={cat.id}
               whileHover={{ scale: 1.05, y: -4 }} whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedCategory(selectedCategory === cat.name ? null : cat.name)}
-              className={`flex-shrink-0 flex items-center gap-3 pr-6 p-2 rounded-full transition-all border-2 shadow-sm ${
-                selectedCategory === cat.name
-                  ? 'bg-[#780116] border-[#780116] shadow-premium text-white'
-                  : 'bg-white border-[#EADDCD] hover:border-[#F7B538] text-[#2A0800]'
-              }`}>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl bg-[#FDF9F1] border ${selectedCategory === cat.name ? 'border-white/20' : 'border-[#F1E6D8]'}`}>
+              onClick={() => navigate(`/search?q=${encodeURIComponent(cat.name)}`)}
+              className={`flex-shrink-0 flex items-center gap-3 pr-6 p-2 rounded-full transition-all border-2 shadow-sm bg-white border-[#EADDCD] hover:border-[#F7B538] text-[#2A0800]`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl bg-[#FDF9F1] border border-[#F1E6D8]`}>
                 {cat.emoji}
               </div>
               <span className="text-lg font-black tracking-wide">
@@ -197,15 +187,8 @@ export default function HomePage() {
       >
         <div className="flex items-end justify-between mb-10">
           <div>
-            {selectedCategory ? (
-              <div className="flex items-center gap-4">
-                <h2 className="text-4xl font-display font-black text-[#780116]">{selectedCategory}</h2>
-                <button onClick={() => setSelectedCategory(null)} className="text-sm text-[#780116] hover:bg-[#F7B538] bg-[#F1E6D8] px-4 py-2 rounded-full transition-colors font-bold">Clear ✕</button>
-              </div>
-            ) : (
-              <h2 className="text-4xl font-display font-black text-[#780116]">Top Picks for You</h2>
-            )}
-            <p className="text-[#8E7B73] text-lg font-bold mt-2">{isLoading ? 'Finding the best spots…' : `${filtered.length} delicious options`}</p>
+            <h2 className="text-4xl font-display font-black text-[#780116]">Top Picks for You</h2>
+            <p className="text-[#8E7B73] text-lg font-bold mt-2">{isLoading ? 'Finding the best spots…' : `${restaurants.length} delicious options`}</p>
           </div>
         </div>
 
@@ -213,9 +196,9 @@ export default function HomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {[...Array(8)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
-        ) : filtered.length > 0 ? (
+        ) : restaurants.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {filtered.map((r, idx) => (
+            {restaurants.map((r, idx) => (
               <motion.div key={r.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 200, delay: idx * 0.05 }} className="h-full bouncy-card">
                 <RestaurantCard restaurant={r} />
               </motion.div>
@@ -224,9 +207,8 @@ export default function HomePage() {
         ) : (
           <div className="py-32 flex flex-col items-center text-center rounded-[3rem] bg-white border-2 border-[#EADDCD] shadow-sm">
             <span className="text-7xl mb-6 animate-bounce-slow">🍽️</span>
-            <h3 className="text-4xl font-display font-black text-[#780116] mb-3">No matches found</h3>
-            <p className="text-[#8E7B73] text-xl font-bold max-w-md mx-auto">Try searching for something else or clearing your filters.</p>
-            <button onClick={() => { setSearchQuery(''); setSelectedCategory(null); }} className="mt-8 bg-[#F7B538] text-[#780116] font-black px-8 py-4 rounded-full hover:bg-[#FFCA60] transition-colors shadow-glow-orange">Reset Search</button>
+            <h3 className="text-4xl font-display font-black text-[#780116] mb-3">No restaurants found</h3>
+            <p className="text-[#8E7B73] text-xl font-bold max-w-md mx-auto">We couldn't find any restaurants in your area.</p>
           </div>
         )}
       </motion.section>

@@ -11,6 +11,8 @@ public interface EmailSender {
 
 	void sendOrderDelivered(String toEmail, String fullName, String title, String message, String referenceLabel);
 
+	void sendOrderCancelled(String toEmail, String fullName, String title, String message, String referenceLabel);
+
 	void sendPaymentReceipt(String toEmail, String fullName, String title, String message, String referenceLabel);
 
 	void sendRefundConfirmation(String toEmail, String fullName, String title, String message, String referenceLabel);

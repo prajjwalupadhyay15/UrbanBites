@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useCartStore } from '../../store/cartStore';
 import { useLocationStore } from '../../store/locationStore';
 import { useQuery } from '@tanstack/react-query';
 import { userApi } from '../../api/userApi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, User, LogOut, FileText, Menu, X, Flame, Store, ArrowLeft, MapPin, ChevronDown } from 'lucide-react';
+import { ShoppingBag, User, LogOut, FileText, Menu, X, Flame, Store, ArrowLeft, MapPin, ChevronDown, Search } from 'lucide-react';
 import LocationPickerModal from '../common/LocationPickerModal';
 
 const IMAGE_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081';
@@ -94,9 +94,9 @@ export default function Navbar() {
                 UrbanBites
               </span>
             </Link>
-
-            {/* ── Location Pill (Zomato-style) ── */}
-            {isConsumer && (
+            
+            {/* ── Standalone Location Pill (Home & Others) ── */}
+            {isConsumer && location.pathname !== '/search' && (
               <div className="hidden sm:flex h-[40px] items-center border-l border-black/10 pl-4 ml-2">
                 <button
                   onClick={() => setIsLocationModalOpen(true)}
@@ -109,6 +109,49 @@ export default function Navbar() {
               </div>
             )}
           </div>
+
+          {/* ── Zomato-Style Global Search & Location Pill ── */}
+          {isConsumer && location.pathname === '/search' && (
+              <div className="hidden md:flex flex-1 max-w-2xl mx-6">
+                <div className={`flex w-full items-center rounded-xl border transition-all shadow-sm ${
+                  isScrolled 
+                    ? 'bg-white border-[#EADDCD]' 
+                    : 'bg-white/95 backdrop-blur-md border-transparent shadow-[0_8px_30px_rgba(42,8,0,0.12)]'
+                }`}>
+                  {/* Location Part */}
+                  <button
+                    onClick={() => setIsLocationModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-l-xl hover:bg-[#FDF9F1] transition-colors shrink-0 max-w-[200px]"
+                  >
+                    <MapPin size={18} className="text-[#F7B538] shrink-0" />
+                    <span className="text-sm font-bold text-[#2A0800] truncate">{locationName}</span>
+                    <ChevronDown size={14} className="text-[#8E7B73] shrink-0" />
+                  </button>
+
+                  {/* Divider */}
+                  <div className="w-[1px] h-6 bg-[#EADDCD] shrink-0" />
+
+                  {/* Search Part */}
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const q = new FormData(e.target).get('q');
+                      if (q) navigate(`/search?q=${encodeURIComponent(q.trim())}`);
+                    }} 
+                    className="flex-1 relative flex items-center"
+                  >
+                    <Search className="absolute left-3 text-[#8E7B73]" size={18} />
+                    <input 
+                      type="text" 
+                      name="q"
+                      defaultValue={new URLSearchParams(location.search).get('q') || ''}
+                      placeholder="Search for restaurant, cuisine or a dish" 
+                      className="w-full bg-transparent py-2.5 pl-10 pr-4 text-sm font-bold text-[#2A0800] placeholder:text-[#8E7B73] outline-none rounded-r-xl"
+                    />
+                  </form>
+                </div>
+              </div>
+            )}
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-2">

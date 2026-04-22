@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -78,9 +79,13 @@ public class NotificationService {
             notification.setTitle(trimToLength(title, 160));
             notification.setMessage(trimToLength(message, 500));
             notification.setReferenceLabel(trimToLength(referenceLabel, 160));
-            notificationRepository.save(notification);
-            publishRealtimeNotification(user.getId(), "NOTIFICATION_CREATED", notification);
-            createdNotification = true;
+            try {
+                notificationRepository.save(notification);
+                publishRealtimeNotification(user.getId(), "NOTIFICATION_CREATED", notification);
+                createdNotification = true;
+            } catch (DataIntegrityViolationException ignored) {
+                // Parallel publisher inserted same event key first; keep processing idempotently.
+            }
         }
 
         for (NotificationChannel channel : resolveChannels(type, sendEmail)) {
@@ -102,7 +107,11 @@ public class NotificationService {
             job.setTitleText(trimToLength(title, 160));
             job.setBodyText(trimToLength(message, 500));
             job.setReferenceLabel(trimToLength(referenceLabel, 160));
-            notificationJobRepository.save(job);
+            try {
+                notificationJobRepository.save(job);
+            } catch (DataIntegrityViolationException ignored) {
+                // Unique(event_key, channel, recipient) guards duplicate jobs from concurrent calls.
+            }
         }
 
         if (!createdNotification) {
@@ -235,6 +244,13 @@ public class NotificationService {
                     job.getBodyText(),
                     job.getReferenceLabel()
             );
+            case ORDER_CANCELLED -> emailSender.sendOrderCancelled(
+                    job.getRecipient(),
+                    job.getUser().getFullName(),
+                    job.getTitleText(),
+                    job.getBodyText(),
+                    job.getReferenceLabel()
+            );
             case PAYMENT_SUCCESS, PAYMENT_FAILURE -> emailSender.sendPaymentReceipt(
                     job.getRecipient(),
                     job.getUser().getFullName(),
@@ -325,7 +341,7 @@ public class NotificationService {
         Set<NotificationChannel> channels = new LinkedHashSet<>();
         channels.add(NotificationChannel.IN_APP);
 
-        if (sendEmail) {
+        if (sendEmail && canReceiveEmail(type)) {
             channels.add(NotificationChannel.EMAIL);
         }
 
@@ -334,6 +350,11 @@ public class NotificationService {
         }
 
         return channels;
+    }
+
+    private boolean canReceiveEmail(NotificationType type) {
+        // Type is available for future policy checks; current gate is recipient verification.
+        return type != null;
     }
 
 
@@ -359,7 +380,7 @@ public class NotificationService {
         return switch (channel) {
             case EMAIL -> {
                 String email = normalize(user.getEmail());
-                yield isEmailableAddress(email) ? email : "";
+                yield isEmailableAddress(email) && user.isEmailVerified() ? email : "";
             }
             case SMS -> normalize(user.getPhone());
             case PUSH -> "user:" + user.getId();

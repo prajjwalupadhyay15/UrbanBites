@@ -1,6 +1,11 @@
 package com.prajjwal.UrbanBites.service;
 
 import com.prajjwal.UrbanBites.util.EmailTemplateUtil;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +23,8 @@ public class SmtpEmailSender implements EmailSender {
     private final JavaMailSender mailSender;
     private final EmailTemplateUtil emailTemplateUtil;
     private final String fromEmail;
+    private final Map<String, OffsetDateTime> recentSends = new ConcurrentHashMap<>();
+    private static final Duration DEDUPE_WINDOW = Duration.ofMinutes(5);
 
     public SmtpEmailSender(JavaMailSender mailSender,
                            EmailTemplateUtil emailTemplateUtil,
@@ -55,6 +62,12 @@ public class SmtpEmailSender implements EmailSender {
     public void sendOrderDelivered(String toEmail, String fullName, String title, String message, String referenceLabel) {
         String html = emailTemplateUtil.renderOrderDeliveredTemplate(fullName, title, message, referenceLabel);
         sendHtmlEmail(toEmail, "UrbanBites Order Delivered", html);
+    }
+
+    @Override
+    public void sendOrderCancelled(String toEmail, String fullName, String title, String message, String referenceLabel) {
+        String html = emailTemplateUtil.renderOrderCancelledTemplate(fullName, title, message, referenceLabel);
+        sendHtmlEmail(toEmail, "UrbanBites Order Cancelled", html);
     }
 
     @Override
@@ -122,6 +135,12 @@ public class SmtpEmailSender implements EmailSender {
             return;
         }
 
+        String dedupeKey = buildDedupeKey(recipient, subject, html);
+        if (isRecentlySent(dedupeKey)) {
+            log.info("Skipping duplicate email within dedupe window. to={}, subject={}", recipient, subject);
+            return;
+        }
+
         try {
             var mimeMessage = mailSender.createMimeMessage();
             var helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
@@ -129,11 +148,39 @@ public class SmtpEmailSender implements EmailSender {
             helper.setTo(recipient);
             helper.setSubject(subject);
             helper.setText(html, true);
+            if (isImportantSubject(subject)) {
+                mimeMessage.addHeader("X-Priority", "1");
+                mimeMessage.addHeader("Priority", "urgent");
+                mimeMessage.addHeader("Importance", "high");
+            }
             mailSender.send(mimeMessage);
+            recentSends.put(dedupeKey, OffsetDateTime.now());
             log.info("Email sent. to={}, subject={}", recipient, subject);
         } catch (Exception ex) {
             log.error("Email send failed. to={}, subject={}, from={}", recipient, subject, fromEmail, ex);
             throw new IllegalStateException("Failed to send email to " + recipient + " with subject " + subject, ex);
         }
+    }
+
+    private String buildDedupeKey(String recipient, String subject, String html) {
+        int bodyHash = html == null ? 0 : html.hashCode();
+        return recipient.toLowerCase(Locale.ROOT) + "|" + subject + "|" + bodyHash;
+    }
+
+    private boolean isRecentlySent(String dedupeKey) {
+        OffsetDateTime now = OffsetDateTime.now();
+        recentSends.entrySet().removeIf(e -> e.getValue().isBefore(now.minus(DEDUPE_WINDOW)));
+        OffsetDateTime previous = recentSends.get(dedupeKey);
+        return previous != null && previous.isAfter(now.minus(DEDUPE_WINDOW));
+    }
+
+    private boolean isImportantSubject(String subject) {
+        String normalized = subject == null ? "" : subject.toLowerCase(Locale.ROOT);
+        return normalized.contains("otp")
+                || normalized.contains("security")
+                || normalized.contains("approval")
+                || normalized.contains("order confirmation")
+                || normalized.contains("out for delivery")
+                || normalized.contains("onboarding");
     }
 }

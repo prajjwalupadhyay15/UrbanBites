@@ -13,6 +13,16 @@ export const restaurantApi = {
   },
 
   /**
+   * GET /api/v1/restaurants/search?q=...
+   */
+  search: async (query) => {
+    const res = await apiClient.get('/api/v1/restaurants/search', {
+      params: { q: query },
+    });
+    return res.data;
+  },
+
+  /**
    * GET /api/v1/restaurants/{restaurantId}/menu  (public)
    */
   getPublicMenu: async (restaurantId) => {

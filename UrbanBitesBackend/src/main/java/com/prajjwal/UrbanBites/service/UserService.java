@@ -6,8 +6,11 @@ import com.prajjwal.UrbanBites.dto.request.ChangePasswordRequest;
 import com.prajjwal.UrbanBites.dto.request.UpdateProfileRequest;
 import com.prajjwal.UrbanBites.dto.response.OtpResponse;
 import com.prajjwal.UrbanBites.dto.response.UserProfileResponse;
+import com.prajjwal.UrbanBites.entity.DeliveryAgentProfile;
 import com.prajjwal.UrbanBites.entity.User;
+import com.prajjwal.UrbanBites.enums.Role;
 import com.prajjwal.UrbanBites.exception.ApiException;
+import com.prajjwal.UrbanBites.repository.DeliveryAgentProfileRepository;
 import com.prajjwal.UrbanBites.repository.RefreshTokenRepository;
 import com.prajjwal.UrbanBites.repository.UserRepository;
 import com.prajjwal.UrbanBites.util.AuthMapper;
@@ -22,6 +25,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final DeliveryAgentProfileRepository deliveryAgentProfileRepository;
     private final OtpService otpService;
     private final PasswordEncoder passwordEncoder;
     private final ImageStorageService imageStorageService;
@@ -29,12 +33,14 @@ public class UserService {
     public UserService(
             UserRepository userRepository,
             RefreshTokenRepository refreshTokenRepository,
+            DeliveryAgentProfileRepository deliveryAgentProfileRepository,
             OtpService otpService,
             PasswordEncoder passwordEncoder,
             ImageStorageService imageStorageService
     ) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.deliveryAgentProfileRepository = deliveryAgentProfileRepository;
         this.otpService = otpService;
         this.passwordEncoder = passwordEncoder;
         this.imageStorageService = imageStorageService;
@@ -43,6 +49,13 @@ public class UserService {
     public UserProfileResponse me(String email) {
         User user = userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (Role.DELIVERY_AGENT.equals(user.getRole())) {
+            return deliveryAgentProfileRepository.findByUserId(user.getId())
+                    .map(profile -> AuthMapper.toProfile(user, profile.isOnline(), profile.isAvailable()))
+                    .orElse(AuthMapper.toProfile(user));
+        }
+
         return AuthMapper.toProfile(user);
     }
 

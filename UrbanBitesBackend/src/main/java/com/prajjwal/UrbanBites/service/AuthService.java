@@ -114,15 +114,6 @@ public class AuthService {
                 false
         );
 
-        if (!phoneFirstSignup && isEmailableAddress(saved.getEmail())) {
-            if (Role.RESTAURANT_OWNER.equals(saved.getRole())) {
-                emailSender.sendPartnerSignupEmail(saved.getEmail(), saved.getFullName(), "Restaurant Partner");
-            } else if (Role.DELIVERY_AGENT.equals(saved.getRole())) {
-                emailSender.sendPartnerSignupEmail(saved.getEmail(), saved.getFullName(), "Delivery Agent");
-            } else {
-                emailSender.sendWelcomeEmail(saved.getEmail(), saved.getFullName());
-            }
-        }
         return issueTokenPair(saved, false);
     }
 
@@ -249,9 +240,30 @@ public class AuthService {
         User user = userRepository.findByEmailIgnoreCase(currentEmail)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
 
+        if (user.isEmailVerified()) {
+            return AuthMapper.toProfile(user);
+        }
+
         otpService.verifyEmailOtp(user.getEmail(), otpCode);
         user.setEmailVerified(true);
-        return AuthMapper.toProfile(userRepository.save(user));
+        User saved = userRepository.save(user);
+        sendPostVerificationWelcome(saved);
+        return AuthMapper.toProfile(saved);
+    }
+
+    private void sendPostVerificationWelcome(User user) {
+        if (!isEmailableAddress(user.getEmail())) {
+            return;
+        }
+        if (Role.RESTAURANT_OWNER.equals(user.getRole())) {
+            emailSender.sendPartnerSignupEmail(user.getEmail(), user.getFullName(), "Restaurant Partner");
+            return;
+        }
+        if (Role.DELIVERY_AGENT.equals(user.getRole())) {
+            emailSender.sendPartnerSignupEmail(user.getEmail(), user.getFullName(), "Delivery Agent");
+            return;
+        }
+        emailSender.sendWelcomeEmail(user.getEmail(), user.getFullName());
     }
 
     @Transactional

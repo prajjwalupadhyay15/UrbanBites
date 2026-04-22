@@ -13,7 +13,9 @@ public record UserProfileResponse(
         String profilePictureUrl,
         boolean phoneVerified,
         boolean emailVerified,
-        ApprovalStatus approvalStatus
+        ApprovalStatus approvalStatus,
+        boolean online,
+        boolean available
 ) {
 }
 

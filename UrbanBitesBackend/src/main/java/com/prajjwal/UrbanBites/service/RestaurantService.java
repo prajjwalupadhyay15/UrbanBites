@@ -190,6 +190,58 @@ public class RestaurantService {
                 .toList();
     }
 
+    public List<RestaurantResponse> searchRestaurants(String query) {
+        if (query == null || query.trim().isBlank()) {
+            return List.of();
+        }
+        
+        String lowerQuery = query.trim().toLowerCase();
+        
+        // Find all active, approved restaurants
+        List<Restaurant> activeApproved = restaurantRepository.findByActiveTrue()
+                .stream()
+                .filter(r -> APPROVED_STATUS.equals(r.getApprovalStatus()))
+                .toList();
+
+        // Find restaurants matching the query directly
+        List<Restaurant> directMatches = activeApproved.stream()
+                .filter(r -> matchesQuery(r, lowerQuery))
+                .toList();
+
+        // Find restaurants matching through their menu items
+        List<MenuItem> matchingMenuItems = menuItemRepository.findByNameContainingIgnoreCaseAndAvailableTrue(lowerQuery);
+        List<Long> itemMatchRestaurantIds = matchingMenuItems.stream()
+                .map(item -> item.getRestaurant().getId())
+                .distinct()
+                .toList();
+
+        List<Restaurant> itemMatches = activeApproved.stream()
+                .filter(r -> itemMatchRestaurantIds.contains(r.getId()))
+                .toList();
+
+        // Combine and deduplicate
+        List<Restaurant> combinedMatches = new ArrayList<>(directMatches);
+        for (Restaurant r : itemMatches) {
+            if (!combinedMatches.contains(r)) {
+                combinedMatches.add(r);
+            }
+        }
+
+        // Return mapped to RestaurantResponse (using 0.0 for distance since this isn't a geo-search)
+        return combinedMatches.stream()
+                .map(r -> toResponse(r, 0.0))
+                .toList();
+    }
+
+    private boolean matchesQuery(Restaurant restaurant, String lowerQuery) {
+        if (restaurant.getName() != null && restaurant.getName().toLowerCase().contains(lowerQuery)) return true;
+        if (restaurant.getDescription() != null && restaurant.getDescription().toLowerCase().contains(lowerQuery)) return true;
+        if (restaurant.getCity() != null && restaurant.getCity().toLowerCase().contains(lowerQuery)) return true;
+        
+        // We'll also check categories via menu items since categories are derived from them
+        return false;
+    }
+
     @Transactional
     public ServiceZoneResponse createServiceZone(CreateServiceZoneRequest request) {
         if (request.name() == null || request.name().isBlank()) {
@@ -450,7 +502,7 @@ public class RestaurantService {
     }
 
     private void sendRestaurantOnboardingStatus(User owner, String restaurantName, String title, String message) {
-        if (!isEmailableAddress(owner.getEmail())) {
+        if (!isEmailableAddress(owner.getEmail()) || !owner.isEmailVerified()) {
             return;
         }
         try {
@@ -461,7 +513,7 @@ public class RestaurantService {
     }
 
     private void sendRestaurantApprovalStatus(User owner, String restaurantName, boolean approved) {
-        if (!isEmailableAddress(owner.getEmail())) {
+        if (!isEmailableAddress(owner.getEmail()) || !owner.isEmailVerified()) {
             return;
         }
         try {

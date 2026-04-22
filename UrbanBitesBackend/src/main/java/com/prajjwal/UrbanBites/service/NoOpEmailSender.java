@@ -43,6 +43,11 @@ public class NoOpEmailSender implements EmailSender {
 	}
 
 	@Override
+	public void sendOrderCancelled(String toEmail, String fullName, String title, String message, String referenceLabel) {
+		log.debug("Skipped sendOrderCancelled to {}", toEmail);
+	}
+
+	@Override
 	public void sendPaymentReceipt(String toEmail, String fullName, String title, String message, String referenceLabel) {
 		log.debug("Skipped sendPaymentReceipt to {}", toEmail);
 	}

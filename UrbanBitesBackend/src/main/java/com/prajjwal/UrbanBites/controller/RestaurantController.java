@@ -191,6 +191,11 @@ public class RestaurantController {
                 minRating));
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<List<RestaurantResponse>> searchRestaurants(@RequestParam String q) {
+        return ResponseEntity.ok(restaurantService.searchRestaurants(q));
+    }
+
     @PostMapping("/zones")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ServiceZoneResponse> createServiceZone(@Valid @RequestBody CreateServiceZoneRequest request) {

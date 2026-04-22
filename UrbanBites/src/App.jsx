@@ -23,7 +23,9 @@ import CartPage from './pages/cart/CartPage';
 
 import OrdersPage from './pages/orders/OrdersPage';
 import OrderTrackingPage from './pages/orders/OrderTrackingPage';
+import SearchResultsPage from './pages/search/SearchResultsPage';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import ScrollToTop from './components/common/ScrollToTop';
 
 // ── Consumer layout (with Navbar, Cart, Footer) ─────────────────────────────
 const ConsumerLayout = () => (
@@ -54,11 +56,13 @@ const OrderTrackingRedirect = () => {
 function App() {
   return (
     <ErrorBoundary>
+      <ScrollToTop />
       <Routes>
 
       {/* ── Consumer App (Navbar + Footer) ─────────────────────────── */}
       <Route element={<ConsumerLayout />}>
         <Route path="/" element={<RoleAwareHome />} />
+        <Route path="/search" element={<SearchResultsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/restaurant/:id" element={<RestaurantDetailsPage />} />
         <Route path="/cart" element={<CartPage />} />

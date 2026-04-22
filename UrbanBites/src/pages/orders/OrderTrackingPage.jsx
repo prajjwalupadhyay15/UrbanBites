@@ -423,8 +423,7 @@ export default function OrderTrackingPage() {
       <motion.div 
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
-        className="flex-1 max-w-md w-full bg-[#FFFCF5] z-20 md:border-l md:border-[#EADDCD] flex flex-col pt-6 pb-4 px-5 relative rounded-t-[2rem] md:rounded-none md:h-screen md:overflow-y-auto shadow-[0_-10px_40px_rgba(0,0,0,0.05)] md:shadow-none"
-        style={{ marginTop: '-2rem' }}
+        className="flex-1 max-w-md w-full bg-[#FFFCF5] z-20 md:border-l md:border-[#EADDCD] flex flex-col pt-10 md:pt-12 pb-4 px-5 relative rounded-t-[2rem] md:rounded-none md:h-screen md:overflow-y-auto shadow-[0_-10px_40px_rgba(0,0,0,0.05)] md:shadow-none"
       >
         <div className="w-12 h-1.5 bg-[#EADDCD] rounded-full mx-auto mb-4 md:hidden"></div>
 

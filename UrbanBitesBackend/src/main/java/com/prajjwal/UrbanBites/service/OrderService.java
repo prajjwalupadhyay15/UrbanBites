@@ -424,7 +424,7 @@ public class OrderService {
                 "Payment successful",
                 "We received your payment for order #" + order.getId() + ".",
                 "Order #" + order.getId(),
-                true,
+                false,
                 "payment:captured:order:" + order.getId()
         );
         publishOrderNotification(
@@ -480,7 +480,7 @@ public class OrderService {
                 "Payment failed",
                 "Payment failed for order #" + order.getId() + ". Please try again.",
                 "Order #" + order.getId(),
-                true,
+                false,
                 "payment:failed:order:" + order.getId()
         );
         publishOrderNotification(
@@ -489,7 +489,7 @@ public class OrderService {
                 "Order cancelled",
                 "Order #" + order.getId() + " was cancelled because payment did not complete.",
                 "Order #" + order.getId(),
-                true,
+                false,
                 "order:cancelled:order:" + order.getId() + ":payment"
         );
 
@@ -595,7 +595,7 @@ public class OrderService {
                             "Payment successful",
                             "We received your payment for order #" + order.getId() + ".",
                             "Order #" + order.getId(),
-                            true,
+                            false,
                             "payment:webhook:captured:order:" + order.getId()
                     );
                     publishOrderNotification(
@@ -646,7 +646,7 @@ public class OrderService {
                             "Payment failed",
                             "Payment failed for order #" + order.getId() + ". Please try again.",
                             "Order #" + order.getId(),
-                            true,
+                            false,
                             "payment:webhook:failed:order:" + order.getId()
                     );
                     publishOrderNotification(
@@ -655,7 +655,7 @@ public class OrderService {
                             "Order cancelled",
                             "Order #" + order.getId() + " was cancelled because payment did not complete.",
                             "Order #" + order.getId(),
-                            true,
+                            false,
                             "order:webhook:cancelled:order:" + order.getId()
                     );
                     publishOrderRealtime(toOrderResponse(order), "ORDER_CANCELLED");
@@ -689,7 +689,7 @@ public class OrderService {
                         "Refund processed",
                         "Refund of INR " + refundAmount + " has been processed for order #" + payment.getOrder().getId() + ".",
                         "Order #" + payment.getOrder().getId(),
-                        true,
+                        false,
                         "payment:webhook:refund:order:" + payment.getOrder().getId() + ":" + eventId
                 );
                 return "processed";
@@ -822,7 +822,7 @@ public class OrderService {
                 "Order is being prepared",
                 "Restaurant has started preparing order #" + order.getId() + ".",
                 "Order #" + order.getId(),
-                true,
+                false,
                 "order:preparing:order:" + order.getId()
         );
         OrderResponse response = toOrderResponse(order);
@@ -845,7 +845,7 @@ public class OrderService {
                 "Restaurant accepted your order",
                 "Restaurant accepted order #" + order.getId() + " and will start preparing it shortly.",
                 "Order #" + order.getId(),
-                true,
+                false,
                 "order:accepted-by-restaurant:order:" + order.getId()
         );
         OrderResponse response = toOrderResponse(order);
@@ -868,7 +868,7 @@ public class OrderService {
                 "Order ready for pickup",
                 "Order #" + order.getId() + " is packed and ready for pickup.",
                 "Order #" + order.getId(),
-                true,
+                false,
                 "order:ready-for-pickup:order:" + order.getId()
         );
         OrderResponse response = toOrderResponse(order);

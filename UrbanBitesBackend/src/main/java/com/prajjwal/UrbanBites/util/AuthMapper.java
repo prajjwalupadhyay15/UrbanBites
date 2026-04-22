@@ -9,6 +9,10 @@ public final class AuthMapper {
     }
 
     public static UserProfileResponse toProfile(User user) {
+        return toProfile(user, false, false);
+    }
+
+    public static UserProfileResponse toProfile(User user, boolean online, boolean available) {
         return new UserProfileResponse(
                 user.getId(),
                 user.getEmail(),
@@ -19,7 +23,9 @@ public final class AuthMapper {
                 user.getProfilePictureUrl(),
                 user.isPhoneVerified(),
                 user.isEmailVerified(),
-                user.getApprovalStatus()
+                user.getApprovalStatus(),
+                online,
+                available
         );
     }
 }
