@@ -60,8 +60,8 @@ export default function CheckoutPage() {
 
   // Checkout preview (real backend pricing)
   const { data: preview, isLoading: previewLoading } = useQuery({
-    queryKey: ['checkout-preview'],
-    queryFn: cartApi.checkoutPreview,
+    queryKey: ['checkout-preview', selectedAddressId],
+    queryFn: () => cartApi.checkoutPreview(selectedAddressId),
     staleTime: 30000,
     enabled: items.length > 0 && isAuthenticated,
   });

@@ -29,8 +29,8 @@ export default function CartDrawer() {
 
   // Real backend fee breakup
   const { data: preview, isLoading: previewLoading } = useQuery({
-    queryKey: ['cart-checkout-preview', items.length, subtotal],
-    queryFn: cartApi.checkoutPreview,
+    queryKey: ['cart-checkout-preview', items.length, subtotal, selectedAddressId],
+    queryFn: () => cartApi.checkoutPreview(selectedAddressId),
     enabled: isDrawerOpen && isAuthenticated && items.length > 0,
     staleTime: 15000,
     retry: 1,

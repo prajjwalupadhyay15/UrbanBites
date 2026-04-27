@@ -43,12 +43,22 @@ export default function CartPage() {
   const [orderedTotal, setOrderedTotal] = useState(0);
 
   const subtotal = getTotalPrice();
-  const serviceable = true;
-  const previewLoading = false;
-  const deliveryFee = 0;
-  const tax = Math.round(subtotal * 0.05);
-  const platformFee = 5;
-  const total = subtotal + deliveryFee + tax + platformFee;
+  
+  // Real backend fee breakup
+  const { data: preview, isLoading: previewLoading } = useQuery({
+    queryKey: ['cart-checkout-preview', items.length, subtotal, selectedAddressId],
+    queryFn: () => cartApi.checkoutPreview(selectedAddressId),
+    enabled: isAuthenticated && items.length > 0,
+    staleTime: 15000,
+    retry: 1,
+  });
+
+  const fees = preview?.fees;
+  const serviceable = preview?.serviceable ?? true;
+  const deliveryFee = fees ? Number(fees.deliveryFee) : 0;
+  const tax = fees ? Number(fees.tax) : Math.round(subtotal * 0.05);
+  const platformFee = fees ? Number(fees.platformFee) : 5;
+  const total = fees ? Number(fees.grandTotal) : subtotal + deliveryFee + tax + platformFee;
 
 
   // Payment mutations

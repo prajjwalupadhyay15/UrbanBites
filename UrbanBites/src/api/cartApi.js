@@ -32,8 +32,9 @@ export const cartApi = {
   },
 
   /** POST /api/v1/cart/checkout-preview → CheckoutPreviewResponse */
-  checkoutPreview: async () => {
-    const res = await apiClient.post('/api/v1/cart/checkout-preview', {});
+  checkoutPreview: async (addressId = null) => {
+    const payload = addressId ? { addressId } : {};
+    const res = await apiClient.post('/api/v1/cart/checkout-preview', payload);
     return res.data;
   },
 };
