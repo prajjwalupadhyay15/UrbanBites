@@ -37,13 +37,9 @@ export default function CartPage() {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [step, setStep] = useState('cart'); // cart → paying → success
   const [error, setError] = useState('');
-  const [placedOrderId, setPlacedOrderId] = useState(null);
-  const [orderedItems, setOrderedItems] = useState([]);
-  const [orderedRestaurant, setOrderedRestaurant] = useState('');
-  const [orderedTotal, setOrderedTotal] = useState(0);
 
   const subtotal = getTotalPrice();
-  
+
   // Real backend fee breakup
   const { data: preview, isLoading: previewLoading } = useQuery({
     queryKey: ['cart-checkout-preview', items.length, subtotal, selectedAddressId],
@@ -69,7 +65,7 @@ export default function CartPage() {
   // Sync local Zustand cart to the server before placing order
   const syncCartToServer = async () => {
     // 1. Clear existing server cart items
-    try { await cartApi.clearCart(); } catch {}
+    try { await cartApi.clearCart(); } catch { }
 
     // 2. Try adding the first item — if 409, the cart entity is tied to a wrong restaurant
     //    We need to get the server cart, remove all its items individually, then retry
@@ -84,15 +80,15 @@ export default function CartPage() {
             const serverCart = await cartApi.getCart();
             if (serverCart?.items?.length) {
               for (const si of serverCart.items) {
-                try { await cartApi.removeItem(si.id); } catch {}
+                try { await cartApi.removeItem(si.id); } catch { }
               }
             }
-          } catch {}
+          } catch { }
           // Retry adding this item (server should create a fresh cart now)
           try {
             const res = await cartApi.addItem(item.id, item.quantity);
             useCartStore.getState().hydrateFromServer(res);
-          } catch {}
+          } catch { }
         }
       }
     }
@@ -106,15 +102,11 @@ export default function CartPage() {
       // Ensure server cart matches local cart
       await syncCartToServer();
       if (selectedAddressId) await addressApi.setDefault(selectedAddressId);
-      setOrderedItems([...items]);
-      setOrderedRestaurant(restaurantName || '');
-      setOrderedTotal(total);
       const order = await placeOrderMut.mutateAsync({
         addressId: selectedAddressId || undefined,
         recipientName: user?.fullName || undefined,
         recipientPhone: user?.phone || undefined,
       });
-      setPlacedOrderId(order.orderId);
       const intent = await paymentMut.mutateAsync(order.orderId);
       if (intent.razorpayOrderId && intent.razorpayKeyId) {
         const loaded = await loadRazorpayScript();
@@ -126,7 +118,7 @@ export default function CartPage() {
             theme: { color: '#F7B538', backdrop_color: '#FFFCF5' },
             handler: async function () {
               try { await simSuccessMut.mutateAsync(order.orderId); } catch (e) { console.error(e); }
-              clearCart(); setStep('success');
+              clearCart(); navigate(`/orders/${order.orderId}/success`);
             },
             modal: { ondismiss: () => { setStep('cart'); setError('Payment was cancelled.'); } },
           });
@@ -136,86 +128,14 @@ export default function CartPage() {
         }
       }
       await simSuccessMut.mutateAsync(order.orderId);
-      clearCart(); setStep('success');
+      clearCart(); navigate(`/orders/${order.orderId}/success`);
     } catch (e) {
       setStep('cart');
       if (e?.response?.status === 401) setError('Session expired. Please log in again.');
       else if (!error) setError(e?.response?.data?.message || e?.message || 'Something went wrong.');
     }
   };
-  // Live polling for the success screen
-  const { data: liveOrder } = useQuery({
-    queryKey: ['liveOrder', placedOrderId],
-    queryFn: () => customerOrderApi.getMyOrder(placedOrderId),
-    enabled: step === 'success' && !!placedOrderId,
-    refetchInterval: 5000, // Poll every 5s
-  });
 
-  // ── Success Screen ──
-  if (step === 'success') {
-    const orderStatus = liveOrder?.status || 'CONFIRMED';
-    
-    // Determine active steps dynamically
-    const isAccepted = ['ACCEPTED_BY_RESTAURANT', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(orderStatus);
-    const isAssigned = ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(orderStatus);
-
-    return (
-      <div className="min-h-screen bg-[#FFFCF5] flex items-center justify-center p-6">
-        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center max-w-sm w-full">
-          <div className="relative w-32 h-32 mx-auto mb-8">
-            {[...Array(8)].map((_, i) => (
-              <motion.div key={i} initial={{ opacity: 0, scale: 0 }} animate={{ opacity: [0, 1, 0], scale: [0, 1.5, 0], x: [0, Math.cos((i * Math.PI) / 4) * 60], y: [0, Math.sin((i * Math.PI) / 4) * 60] }} transition={{ delay: 0.3 + i * 0.08, duration: 1.2 }} className="absolute top-1/2 left-1/2 w-3 h-3 rounded-full" style={{ backgroundColor: ['#F7B538', '#780116', '#22c55e', '#3b82f6'][i % 4] }} />
-            ))}
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2, stiffness: 200 }} className="absolute inset-0 bg-green-50 border-2 border-green-200 rounded-full flex items-center justify-center shadow-sm">
-              <CheckCircle2 size={56} className="text-green-500" />
-            </motion.div>
-          </div>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
-            <h1 className="text-4xl font-display font-black text-[#780116] mb-2">Order Placed! 🎉</h1>
-            <p className="text-[#8E7B73] text-sm font-bold mb-4">Payment successful. Your food is on its way!</p>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="bg-white border border-[#EADDCD] shadow-sm rounded-3xl p-6 mb-4 text-left">
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#EADDCD]">
-              <div><p className="text-[#780116] font-black text-base">{orderedRestaurant || 'Your Order'}</p>{placedOrderId && <p className="text-[#8E7B73] text-xs font-bold mt-0.5">Order #{placedOrderId}</p>}</div>
-              <span className="text-[#2A0800] font-black text-xl">₹{orderedTotal.toLocaleString('en-IN')}</span>
-            </div>
-            <div className="space-y-3">
-              {orderedItems.map(item => (
-                <div key={item.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center ${item.veg ? 'border-green-600' : 'border-red-600'}`}><span className={`w-1.5 h-1.5 rounded-full ${item.veg ? 'bg-green-600' : 'bg-red-600'}`} /></span>
-                    <span className="text-[#780116] text-sm font-bold">{item.name}</span>
-                    <span className="text-[#8E7B73] text-xs">×{item.quantity}</span>
-                  </div>
-                  <span className="text-[#2A0800] text-sm font-black">₹{(item.price * item.quantity).toFixed(0)}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="bg-white border border-[#EADDCD] shadow-sm rounded-3xl p-6 mb-8 text-left">
-            <p className="text-[#8E7B73] text-[10px] font-black uppercase tracking-widest mb-4">What's happening next</p>
-            <div className="space-y-4">
-              {[
-                { icon: ChefHat, label: 'Restaurant notified', desc: 'Waiting for confirmation', active: !isAccepted && !isAssigned },
-                { icon: Utensils, label: 'Food preparation', desc: 'Chef will start cooking', active: isAccepted && !isAssigned },
-                { icon: Bike, label: 'Delivery assigned', desc: 'Agent picks up your order', active: isAssigned }
-              ].map(({ icon: Icon, label, desc, active }, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${active ? 'bg-[#FDF9F1] border-2 border-[#F7B538]' : 'bg-white border border-[#EADDCD]'}`}><Icon size={18} className={active ? 'text-[#F7B538]' : 'text-[#EADDCD]'} /></div>
-                  <div><p className={`text-sm font-bold ${active ? 'text-[#780116]' : 'text-[#8E7B73]'}`}>{label}</p><p className="text-[#8E7B73] text-xs">{desc}</p></div>
-                  {active && <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 1.5 }} className="ml-auto w-2.5 h-2.5 rounded-full bg-[#F7B538]" />}
-                </div>
-              ))}
-            </div>
-          </motion.div>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }} className="space-y-4">
-            <button onClick={() => navigate(`/orders/${placedOrderId}/track`)} className="w-full py-4 rounded-2xl bg-[#780116] border-2 border-[#A00320] text-white font-black text-lg shadow-premium hover:-translate-y-1 active:scale-[0.98] transition-all flex items-center justify-center gap-2"><Package size={20} /> Track Order</button>
-            <button onClick={() => navigate('/')} className="w-full py-4 rounded-2xl bg-white border border-[#EADDCD] text-[#780116] font-bold text-sm hover:bg-[#FDF9F1] hover:border-[#F7B538] transition-all shadow-sm">Back to Home</button>
-          </motion.div>
-        </motion.div>
-      </div>
-    );
-  }
 
   // ── Empty cart ──
   if (items.length === 0) {
@@ -309,7 +229,7 @@ export default function CartPage() {
               <h3 className="text-lg font-black text-[#780116]">Your Items</h3>
             </div>
             <button
-              onClick={() => { if (window.confirm('Clear all items?')) { clearCart(); if (isAuthenticated) cartApi.clearCart().catch(() => {}); } }}
+              onClick={() => { if (window.confirm('Clear all items?')) { clearCart(); if (isAuthenticated) cartApi.clearCart().catch(() => { }); } }}
               className="text-xs font-bold text-[#8E7B73] hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-all flex items-center gap-1"
             >
               <Trash2 size={12} /> Clear
@@ -472,10 +392,10 @@ export default function CartPage() {
                 <h3 className="text-2xl font-black text-[#780116] mb-2 font-display">Login Required</h3>
                 <p className="text-[#8E7B73] text-sm font-bold mb-8">Sign in to proceed with your order. Your cart items will be preserved!</p>
                 <div className="flex flex-col gap-3">
-                  <Link to="/login?redirect=/checkout" className="w-full py-4 rounded-2xl bg-[#780116] border-2 border-[#A00320] text-white font-black shadow-premium hover:-translate-y-1 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                  <Link to="/login?redirect=/cart" className="w-full py-4 rounded-2xl bg-[#780116] border-2 border-[#A00320] text-white font-black shadow-premium hover:-translate-y-1 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
                     <LogIn size={18} /> Sign In
                   </Link>
-                  <Link to="/register?redirect=/checkout" className="w-full py-4 rounded-2xl bg-white border border-[#EADDCD] text-[#2A0800] font-black hover:bg-[#FDF9F1] hover:border-[#F7B538] transition-all flex items-center justify-center gap-2 shadow-sm">
+                  <Link to="/register?redirect=/cart" className="w-full py-4 rounded-2xl bg-white border border-[#EADDCD] text-[#2A0800] font-black hover:bg-[#FDF9F1] hover:border-[#F7B538] transition-all flex items-center justify-center gap-2 shadow-sm">
                     <UserPlus size={18} /> Create Account
                   </Link>
                 </div>

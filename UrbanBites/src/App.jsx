@@ -23,6 +23,7 @@ import CartPage from './pages/cart/CartPage';
 
 import OrdersPage from './pages/orders/OrdersPage';
 import OrderTrackingPage from './pages/orders/OrderTrackingPage';
+import OrderSuccessPage from './pages/orders/OrderSuccessPage';
 import SearchResultsPage from './pages/search/SearchResultsPage';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import ScrollToTop from './components/common/ScrollToTop';
@@ -59,59 +60,60 @@ function App() {
       <ScrollToTop />
       <Routes>
 
-      {/* ── Consumer App (Navbar + Footer) ─────────────────────────── */}
-      <Route element={<ConsumerLayout />}>
-        <Route path="/" element={<RoleAwareHome />} />
-        <Route path="/search" element={<SearchResultsPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/restaurant/:id" element={<RestaurantDetailsPage />} />
-        <Route path="/cart" element={<CartPage />} />
-        <Route path="/orders" element={<OrdersPage />} />
-      </Route>
-
-      {/* ── Tracking Page ──────────────────────────────────────────────── */}
-      <Route path="/orders/:id/track" element={<OrderTrackingPage />} />
-      {/* Redirect /orders/:id to tracking page */}
-      <Route path="/orders/:id" element={<OrderTrackingRedirect />} />
-
-      {/* ── Auth & Partner Setup (no layout headers) ────────────────── */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/partner-with-us" element={<PartnerGateway />} />
-      <Route path="/partner/restaurant/register" element={<RestaurantPartnerPage />} />
-      <Route path="/partner/delivery/register" element={<DeliveryPartnerPage />} />
-
-      {/* ── Owner Business Suite ────────────────────────────────────── */}
-      <Route element={<ProtectedRoute allowedRoles={['RESTAURANT_OWNER']} />}>
-        <Route element={<PartnerLayout />}>
-          <Route path="/owner/dashboard" element={<OwnerDashboard />} />
-          <Route path="/owner/restaurants" element={<ManageRestaurants />} />
-          <Route path="/owner/restaurants/:restaurantId/menu" element={<MenuManager />} />
-          {/* Owner profile reuses the main profile page */}
-          <Route path="/owner/profile" element={<ProfilePage />} />
+        {/* ── Consumer App (Navbar + Footer) ─────────────────────────── */}
+        <Route element={<ConsumerLayout />}>
+          <Route path="/" element={<RoleAwareHome />} />
+          <Route path="/search" element={<SearchResultsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/restaurant/:id" element={<RestaurantDetailsPage />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/orders" element={<OrdersPage />} />
         </Route>
-      </Route>
 
-      {/* ── Delivery Agent Suite ────────────────────────────────────── */}
-      <Route element={<ProtectedRoute allowedRoles={['DELIVERY_AGENT']} />}>
-        <Route element={<PartnerLayout />}>
-          <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
-          <Route path="/delivery/profile" element={<ProfilePage />} />
+        {/* ── Tracking & Success Pages ───────────────────────────────────── */}
+        <Route path="/orders/:id/track" element={<OrderTrackingPage />} />
+        <Route path="/orders/:id/success" element={<OrderSuccessPage />} />
+        {/* Redirect /orders/:id to tracking page */}
+        <Route path="/orders/:id" element={<OrderTrackingRedirect />} />
+
+        {/* ── Auth & Partner Setup (no layout headers) ────────────────── */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/partner-with-us" element={<PartnerGateway />} />
+        <Route path="/partner/restaurant/register" element={<RestaurantPartnerPage />} />
+        <Route path="/partner/delivery/register" element={<DeliveryPartnerPage />} />
+
+        {/* ── Owner Business Suite ────────────────────────────────────── */}
+        <Route element={<ProtectedRoute allowedRoles={['RESTAURANT_OWNER']} />}>
+          <Route element={<PartnerLayout />}>
+            <Route path="/owner/dashboard" element={<OwnerDashboard />} />
+            <Route path="/owner/restaurants" element={<ManageRestaurants />} />
+            <Route path="/owner/restaurants/:restaurantId/menu" element={<MenuManager />} />
+            {/* Owner profile reuses the main profile page */}
+            <Route path="/owner/profile" element={<ProfilePage />} />
+          </Route>
         </Route>
-      </Route>
 
-      {/* ── Admin Suite ─────────────────────────────────────────────── */}
-      <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
-        <Route element={<PartnerLayout />}>
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin/profile" element={<ProfilePage />} />
+        {/* ── Delivery Agent Suite ────────────────────────────────────── */}
+        <Route element={<ProtectedRoute allowedRoles={['DELIVERY_AGENT']} />}>
+          <Route element={<PartnerLayout />}>
+            <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
+            <Route path="/delivery/profile" element={<ProfilePage />} />
+          </Route>
         </Route>
-      </Route>
 
-      {/* ── Catch-all: 404 redirect to home ─────────────────────────── */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+        {/* ── Admin Suite ─────────────────────────────────────────────── */}
+        <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
+          <Route element={<PartnerLayout />}>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/profile" element={<ProfilePage />} />
+          </Route>
+        </Route>
 
-    </Routes>
+        {/* ── Catch-all: 404 redirect to home ─────────────────────────── */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
+      </Routes>
     </ErrorBoundary>
   );
 }
