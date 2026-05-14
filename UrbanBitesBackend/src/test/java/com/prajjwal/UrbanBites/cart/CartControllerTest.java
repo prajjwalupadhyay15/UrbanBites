@@ -351,7 +351,7 @@ class CartControllerTest {
         Long restaurantId = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
         Restaurant restaurant = restaurantRepository.findById(restaurantId).orElseThrow();
         restaurant.setActive(true);
-        restaurant.setApprovalStatus(ApprovalStatus.APPROVED.name());
+        restaurant.setApprovalStatus(ApprovalStatus.APPROVED);
         restaurantRepository.save(restaurant);
         return restaurantId;
     }

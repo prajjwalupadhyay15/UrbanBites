@@ -1015,7 +1015,7 @@ class OrderControllerTest {
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
                 .orElseThrow(() -> new IllegalStateException("Created restaurant not found: " + restaurantId));
         restaurant.setActive(true);
-        restaurant.setApprovalStatus(com.prajjwal.UrbanBites.enums.ApprovalStatus.APPROVED.name());
+        restaurant.setApprovalStatus(com.prajjwal.UrbanBites.enums.ApprovalStatus.APPROVED);
         restaurantRepository.save(restaurant);
         return restaurantId;
     }

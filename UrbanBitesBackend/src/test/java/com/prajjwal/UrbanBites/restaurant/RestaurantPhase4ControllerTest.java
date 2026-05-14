@@ -244,7 +244,7 @@ class RestaurantPhase4ControllerTest {
     private void activateRestaurant(Long restaurantId) {
         Restaurant restaurant = restaurantRepository.findById(restaurantId).orElseThrow();
         restaurant.setActive(true);
-        restaurant.setApprovalStatus(ApprovalStatus.APPROVED.name());
+        restaurant.setApprovalStatus(ApprovalStatus.APPROVED);
         restaurantRepository.save(restaurant);
     }
 }
