@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ShoppingBag, ArrowLeft, MapPin, CreditCard, Plus, Minus, Trash2,
   AlertCircle, Receipt, Loader2, LogIn, UserPlus, UtensilsCrossed, Sparkles,
@@ -30,6 +30,7 @@ function loadRazorpayScript() {
 
 export default function CartPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { items, removeItem, addItem, restaurantName, restaurantId, clearCart, getTotalPrice } = useCartStore();
   const { isAuthenticated, user, token } = useAuthStore();
 
@@ -51,16 +52,46 @@ export default function CartPage() {
 
   const fees = preview?.fees;
   const serviceable = preview?.serviceable ?? true;
-  const deliveryFee = fees ? Number(fees.deliveryFee) : 0;
-  const tax = fees ? Number(fees.tax) : Math.round(subtotal * 0.05);
+  const deliveryFee = fees ? Number(fees.deliveryFee) : null;
+  const tax = fees ? Number(fees.tax) : null;
   const platformFee = fees ? Number(fees.platformFee) : 5;
-  const total = fees ? Number(fees.grandTotal) : subtotal + deliveryFee + tax + platformFee;
+  const total = fees ? Number(fees.grandTotal) : (deliveryFee !== null ? subtotal + (deliveryFee || 0) + (tax || 0) + platformFee : subtotal + platformFee);
 
 
   // Payment mutations
   const placeOrderMut = useMutation({ mutationFn: customerOrderApi.placeOrder, onError: (err) => setError(err.response?.data?.message || 'Failed to place order') });
   const paymentMut = useMutation({ mutationFn: customerOrderApi.createPaymentIntent, onError: (err) => setError(err.response?.data?.message || 'Payment intent failed') });
   const simSuccessMut = useMutation({ mutationFn: customerOrderApi.simulatePaymentSuccess });
+
+  const [syncingItemId, setSyncingItemId] = useState(null);
+
+  const handleIncrement = async (item) => {
+    addItem(item, restaurantId, restaurantName);
+    if (!isAuthenticated) return;
+    setSyncingItemId(item.id);
+    try {
+      const cart = await cartApi.addItem(item.id, 1);
+      useCartStore.getState().hydrateFromServer(cart);
+      qc.invalidateQueries({ queryKey: ['cart-checkout-preview'] });
+    } catch (e) {}
+    finally { setSyncingItemId(null); }
+  };
+
+  const handleDecrement = async (item) => {
+    removeItem(item.id);
+    if (!isAuthenticated || !item.cartItemId) return;
+    setSyncingItemId(item.id);
+    try {
+      if (item.quantity <= 1) {
+        await cartApi.removeItem(item.cartItemId);
+      } else {
+        const cart = await cartApi.updateItem(item.cartItemId, item.quantity - 1);
+        useCartStore.getState().hydrateFromServer(cart);
+      }
+      qc.invalidateQueries({ queryKey: ['cart-checkout-preview'] });
+    } catch (e) {}
+    finally { setSyncingItemId(null); }
+  };
 
   // Sync local Zustand cart to the server before placing order
   const syncCartToServer = async () => {
@@ -120,7 +151,11 @@ export default function CartPage() {
               try { await simSuccessMut.mutateAsync(order.orderId); } catch (e) { console.error(e); }
               clearCart(); navigate(`/orders/${order.orderId}/success`);
             },
-            modal: { ondismiss: () => { setStep('cart'); setError('Payment was cancelled.'); } },
+            modal: { ondismiss: () => { 
+              setStep('cart'); 
+              setError('Payment was cancelled.');
+              qc.invalidateQueries({ queryKey: ['cart-checkout-preview'] });
+            } },
           });
           rzp.on('payment.failed', (r) => { setStep('cart'); setError(r.error?.description || 'Payment failed.'); });
           rzp.open();
@@ -258,11 +293,11 @@ export default function CartPage() {
                   </div>
 
                   <div className="flex items-center gap-1 bg-[#FFFCF5] rounded-xl border border-[#EADDCD] shadow-sm h-9 px-0.5 shrink-0">
-                    <button onClick={() => removeItem(item.id)} className="w-8 h-full flex items-center justify-center text-[#780116] hover:text-[#F7B538] transition-colors">
+                    <button onClick={() => handleDecrement(item)} disabled={syncingItemId === item.id} className="w-8 h-full flex items-center justify-center text-[#780116] hover:text-[#F7B538] transition-colors disabled:opacity-50">
                       <Minus size={14} strokeWidth={3} />
                     </button>
                     <span className="w-7 text-center font-black text-[#2A0800] text-sm tabular-nums">{item.quantity}</span>
-                    <button onClick={() => addItem(item, restaurantId, restaurantName)} className="w-8 h-full flex items-center justify-center text-[#780116] hover:text-[#F7B538] transition-colors">
+                    <button onClick={() => handleIncrement(item)} disabled={syncingItemId === item.id} className="w-8 h-full flex items-center justify-center text-[#780116] hover:text-[#F7B538] transition-colors disabled:opacity-50">
                       <Plus size={14} strokeWidth={3} />
                     </button>
                   </div>
@@ -321,8 +356,8 @@ export default function CartPage() {
           ) : (
             <div className="space-y-3 mb-5 text-sm">
               <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Item Total</span><span className="text-[#2A0800] font-black">₹{subtotal.toFixed(0)}</span></div>
-              <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Delivery Fee</span><span className="text-[#2A0800] font-black">₹{deliveryFee}</span></div>
-              <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Taxes & Charges</span><span className="text-[#2A0800] font-black">₹{tax}</span></div>
+              <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Delivery Fee</span><span className="text-[#2A0800] font-black">{deliveryFee !== null ? `₹${deliveryFee}` : '--'}</span></div>
+              <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Taxes & Charges</span><span className="text-[#2A0800] font-black">{tax !== null ? `₹${tax}` : '--'}</span></div>
               <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Platform Fee</span><span className="text-[#2A0800] font-black">₹{platformFee}</span></div>
             </div>
           )}

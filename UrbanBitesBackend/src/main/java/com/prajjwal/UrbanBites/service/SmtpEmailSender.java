@@ -1,6 +1,7 @@
 package com.prajjwal.UrbanBites.service;
 
 import com.prajjwal.UrbanBites.util.EmailTemplateUtil;
+import com.prajjwal.UrbanBites.exception.ApiException;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Locale;
@@ -10,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -158,7 +160,7 @@ public class SmtpEmailSender implements EmailSender {
             log.info("Email sent. to={}, subject={}", recipient, subject);
         } catch (Exception ex) {
             log.error("Email send failed. to={}, subject={}, from={}", recipient, subject, fromEmail, ex);
-            throw new IllegalStateException("Failed to send email to " + recipient + " with subject " + subject, ex);
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to send email. Please check your connection or try again later.");
         }
     }
 

@@ -10,6 +10,7 @@ import com.prajjwal.UrbanBites.entity.Restaurant;
 import com.prajjwal.UrbanBites.entity.RestaurantServiceZone;
 import com.prajjwal.UrbanBites.entity.ServiceZone;
 import com.prajjwal.UrbanBites.entity.User;
+import com.prajjwal.UrbanBites.enums.ApprovalStatus;
 import com.prajjwal.UrbanBites.enums.DiscoveryFoodType;
 import com.prajjwal.UrbanBites.enums.DiscoveryPriceBracket;
 import com.prajjwal.UrbanBites.enums.ZoneRuleType;
@@ -37,7 +38,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class RestaurantService {
 
     private static final double EARTH_RADIUS_KM = 6371.0d;
-    private static final String APPROVED_STATUS = "APPROVED";
     private static final Logger log = LoggerFactory.getLogger(RestaurantService.class);
 
     private final RestaurantRepository restaurantRepository;
@@ -77,7 +77,7 @@ public class RestaurantService {
             restaurant.setOwner(owner);
             apply(restaurant, request.name(), request.description(), request.addressLine(), request.city(),
                     request.latitude(), request.longitude(), request.openNow(), false, imagePath);
-            restaurant.setApprovalStatus("PENDING");
+            restaurant.setApprovalStatus(ApprovalStatus.PENDING);
             Restaurant saved = restaurantRepository.save(restaurant);
             sendRestaurantOnboardingStatus(
                     owner,
@@ -115,9 +115,6 @@ public class RestaurantService {
         if (imagePath != null && existingImagePath != null && !existingImagePath.equals(updated.getImagePath())) {
             imageStorageService.deleteImage(existingImagePath);
         }
-        if (!wasActive && updated.isActive()) {
-            sendRestaurantApprovalStatus(owner, updated.getName(), true);
-        }
         return toResponse(updated, null);
     }
 
@@ -143,7 +140,7 @@ public class RestaurantService {
 
         List<RestaurantDistance> candidates = restaurantRepository.findByActiveTrue()
                 .stream()
-                .filter(r -> APPROVED_STATUS.equals(r.getApprovalStatus()))
+                .filter(r -> ApprovalStatus.APPROVED.equals(r.getApprovalStatus()))
                 .map(restaurant -> new RestaurantDistance(
                         restaurant,
                         haversineKm(
@@ -200,7 +197,7 @@ public class RestaurantService {
         // Find all active, approved restaurants
         List<Restaurant> activeApproved = restaurantRepository.findByActiveTrue()
                 .stream()
-                .filter(r -> APPROVED_STATUS.equals(r.getApprovalStatus()))
+                .filter(r -> ApprovalStatus.APPROVED.equals(r.getApprovalStatus()))
                 .toList();
 
         // Find restaurants matching the query directly
@@ -295,13 +292,13 @@ public class RestaurantService {
     }
 
     public Restaurant getActiveRestaurant(Long restaurantId) {
-        return restaurantRepository.findByIdAndActiveTrueAndApprovalStatus(restaurantId, APPROVED_STATUS)
+        return restaurantRepository.findByIdAndActiveTrueAndApprovalStatus(restaurantId, ApprovalStatus.APPROVED)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Restaurant not found"));
     }
 
     @Transactional(readOnly = true)
     public RestaurantResponse getRestaurantById(Long id) {
-        Restaurant restaurant = restaurantRepository.findByIdAndActiveTrueAndApprovalStatus(id, APPROVED_STATUS)
+        Restaurant restaurant = restaurantRepository.findByIdAndActiveTrueAndApprovalStatus(id, ApprovalStatus.APPROVED)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Restaurant not found"));
         return toResponse(restaurant, null);
     }
@@ -406,7 +403,8 @@ public class RestaurantService {
                 restaurant.getAvgRating().setScale(2, RoundingMode.HALF_UP),
                 restaurant.getRatingCount(),
                 distanceKm,
-                categories
+                categories,
+                restaurant.getApprovalStatus()
         );
     }
 
@@ -512,16 +510,7 @@ public class RestaurantService {
         }
     }
 
-    private void sendRestaurantApprovalStatus(User owner, String restaurantName, boolean approved) {
-        if (!isEmailableAddress(owner.getEmail()) || !owner.isEmailVerified()) {
-            return;
-        }
-        try {
-            emailSender.sendRestaurantApprovalStatus(owner.getEmail(), owner.getFullName(), restaurantName, approved);
-        } catch (Exception ex) {
-            log.warn("Failed to send restaurant approval email to {}", owner.getEmail(), ex);
-        }
-    }
+
 
     private String normalizeFailureReason(String reason) {
         if (reason == null || reason.isBlank()) {

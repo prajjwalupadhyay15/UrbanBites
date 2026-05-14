@@ -67,6 +67,10 @@ export default function ManageRestaurants() {
   }
 
   const handleQuickToggle = async (rest, field) => {
+    if (rest.approvalStatus === 'PENDING') {
+      toast.error('Restaurant is pending approval. Please wait for an admin to accept it.');
+      return;
+    }
     const toggleId = `${rest.id}-${field}`;
     setTogglingId(toggleId);
     try {
@@ -99,7 +103,7 @@ export default function ManageRestaurants() {
     setEditForm({
       id: rest.id, name: rest.name, description: rest.description || '',
       addressLine: rest.addressLine, city: rest.city, openNow: rest.openNow,
-      active: rest.active, imageFile: null
+      active: rest.active, imageFile: null, approvalStatus: rest.approvalStatus
     });
     setIsEditing(true);
   }
@@ -463,7 +467,13 @@ export default function ManageRestaurants() {
                             <p className="text-[#780116] font-black text-sm mb-0.5">Active Listing</p>
                             <p className="text-[#8E7B73] text-xs font-bold">Show in discovery</p>
                          </div>
-                         <input type="checkbox" checked={editForm.active} onChange={e => setEditForm(p => ({...p, active: e.target.checked}))} className="w-5 h-5 accent-[#F7B538] rounded" />
+                         <input type="checkbox" checked={editForm.active} onChange={e => {
+                           if (editForm.approvalStatus === 'PENDING') {
+                             toast.error('Restaurant is pending approval. Please wait for an admin to accept it.');
+                             return;
+                           }
+                           setEditForm(p => ({...p, active: e.target.checked}));
+                         }} className="w-5 h-5 accent-[#F7B538] rounded" />
                        </label>
                        
                        <label className="flex items-center justify-between p-4 rounded-2xl border-2 border-white bg-white/60 backdrop-blur-md shadow-sm cursor-pointer hover:border-green-400 transition-all">
@@ -471,7 +481,13 @@ export default function ManageRestaurants() {
                             <p className="text-[#780116] font-black text-sm mb-0.5">Open Now</p>
                             <p className="text-[#8E7B73] text-xs font-bold">Accepting orders</p>
                          </div>
-                         <input type="checkbox" checked={editForm.openNow} onChange={e => setEditForm(p => ({...p, openNow: e.target.checked}))} className="w-5 h-5 accent-green-600 rounded" />
+                         <input type="checkbox" checked={editForm.openNow} onChange={e => {
+                           if (editForm.approvalStatus === 'PENDING') {
+                             toast.error('Restaurant is pending approval. Please wait for an admin to accept it.');
+                             return;
+                           }
+                           setEditForm(p => ({...p, openNow: e.target.checked}));
+                         }} className="w-5 h-5 accent-green-600 rounded" />
                        </label>
                     </div>
 

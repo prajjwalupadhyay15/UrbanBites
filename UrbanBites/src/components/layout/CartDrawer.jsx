@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
 import { cartApi } from '../../api/cartApi';
@@ -58,7 +58,38 @@ export default function CartDrawer() {
       return;
     }
     closeDrawer();
-    navigate('/checkout');
+    navigate('/cart');
+  };
+
+  const qc = useQueryClient();
+  const [syncingItemId, setSyncingItemId] = useState(null);
+
+  const handleIncrement = async (item) => {
+    addItem(item, restaurantId, restaurantName);
+    if (!isAuthenticated) return;
+    setSyncingItemId(item.id);
+    try {
+      const cart = await cartApi.addItem(item.id, 1);
+      useCartStore.getState().hydrateFromServer(cart);
+      qc.invalidateQueries({ queryKey: ['cart-checkout-preview'] });
+    } catch (e) {}
+    finally { setSyncingItemId(null); }
+  };
+
+  const handleDecrement = async (item) => {
+    removeItem(item.id);
+    if (!isAuthenticated || !item.cartItemId) return;
+    setSyncingItemId(item.id);
+    try {
+      if (item.quantity <= 1) {
+        await cartApi.removeItem(item.cartItemId);
+      } else {
+        const cart = await cartApi.updateItem(item.cartItemId, item.quantity - 1);
+        useCartStore.getState().hydrateFromServer(cart);
+      }
+      qc.invalidateQueries({ queryKey: ['cart-checkout-preview'] });
+    } catch (e) {}
+    finally { setSyncingItemId(null); }
   };
 
   return (
@@ -194,8 +225,9 @@ export default function CartDrawer() {
                           {/* Qty */}
                           <div className="flex items-center gap-0.5 bg-[#FFFCF5] border border-[#EADDCD] rounded-xl h-9 px-0.5 shrink-0 shadow-inner">
                             <button
-                              onClick={() => removeItem(item.id)}
-                              className="w-8 h-full flex items-center justify-center text-[#780116] hover:text-[#F7B538] transition-colors active:scale-90"
+                              onClick={() => handleDecrement(item)}
+                              disabled={syncingItemId === item.id}
+                              className="w-8 h-full flex items-center justify-center text-[#780116] hover:text-[#F7B538] transition-colors active:scale-90 disabled:opacity-50"
                             >
                               <Minus size={14} strokeWidth={3} />
                             </button>
@@ -208,8 +240,9 @@ export default function CartDrawer() {
                               {item.quantity}
                             </motion.span>
                             <button
-                              onClick={() => addItem(item, restaurantId, restaurantName)}
-                              className="w-8 h-full flex items-center justify-center text-[#780116] hover:text-[#F7B538] transition-colors active:scale-90"
+                              onClick={() => handleIncrement(item)}
+                              disabled={syncingItemId === item.id}
+                              className="w-8 h-full flex items-center justify-center text-[#780116] hover:text-[#F7B538] transition-colors active:scale-90 disabled:opacity-50"
                             >
                               <Plus size={14} strokeWidth={3} />
                             </button>

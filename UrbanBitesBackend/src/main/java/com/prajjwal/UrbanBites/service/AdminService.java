@@ -811,7 +811,7 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<com.prajjwal.UrbanBites.dto.response.AdminRestaurantApprovalResponse> listPendingRestaurantApprovals() {
-        return restaurantRepository.findByApprovalStatusOrderByCreatedAtDesc("PENDING")
+        return restaurantRepository.findByApprovalStatusOrderByCreatedAtDesc(com.prajjwal.UrbanBites.enums.ApprovalStatus.PENDING)
                 .stream().map(this::toRestaurantApprovalResponse).toList();
     }
 
@@ -876,7 +876,7 @@ public class AdminService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Restaurant not found"));
 
         boolean approved = Boolean.TRUE.equals(request.approved());
-        String newStatus = approved ? "APPROVED" : "REJECTED";
+        com.prajjwal.UrbanBites.enums.ApprovalStatus newStatus = approved ? com.prajjwal.UrbanBites.enums.ApprovalStatus.APPROVED : com.prajjwal.UrbanBites.enums.ApprovalStatus.REJECTED;
         String normalizedReason = normalizeText(request.rejectionReason(), null);
         if (!approved && normalizedReason == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "rejectionReason is required when rejected");
@@ -897,7 +897,7 @@ public class AdminService {
                 "RESTAURANT",
                 restaurant.getId(),
                 "{\"approvalStatus\":\"PENDING\"}",
-                "{\"approvalStatus\":\"" + newStatus + "\"}",
+                "{\"approvalStatus\":\"" + newStatus.name() + "\"}",
                 normalizedReason,
                 actor
         );
@@ -943,6 +943,7 @@ public class AdminService {
                     return newProfile;
                 });
         profile.setVerified(approved);
+        profile.setApprovalStatus(newStatus);
         if (!approved) {
             profile.setApprovalRejectionReason(normalizedReason);
             profile.setOnline(false);

@@ -1,6 +1,7 @@
 package com.prajjwal.UrbanBites.repository;
 
 import com.prajjwal.UrbanBites.entity.Restaurant;
+import com.prajjwal.UrbanBites.enums.ApprovalStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,12 +14,12 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, Long> {
 
     Optional<Restaurant> findByIdAndActiveTrue(Long id);
 
-    Optional<Restaurant> findByIdAndActiveTrueAndApprovalStatus(Long id, String approvalStatus);
+    Optional<Restaurant> findByIdAndActiveTrueAndApprovalStatus(Long id, ApprovalStatus approvalStatus);
 
     List<Restaurant> findByActiveTrueAndOpenNowTrue();
 
     List<Restaurant> findByActiveTrue();
 
-    List<Restaurant> findByApprovalStatusOrderByCreatedAtDesc(String approvalStatus);
+    List<Restaurant> findByApprovalStatusOrderByCreatedAtDesc(ApprovalStatus approvalStatus);
 }
 

@@ -55,6 +55,7 @@ class NotificationServiceTest {
         seed.setFullName("Notify Tester");
         seed.setRole(Role.CUSTOMER);
         seed.setEnabled(true);
+        seed.setEmailVerified(true);
         user = userRepository.save(seed);
     }
 

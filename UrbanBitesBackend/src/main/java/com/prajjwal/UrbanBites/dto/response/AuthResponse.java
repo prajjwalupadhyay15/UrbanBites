@@ -10,7 +10,9 @@ public record AuthResponse(
         String email,
         String fullName,
         Role role,
-        boolean loggedIn
+        boolean loggedIn,
+        boolean emailVerified,
+        boolean phoneVerified
 ) {
 }
 

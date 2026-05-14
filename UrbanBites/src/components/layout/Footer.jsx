@@ -16,7 +16,7 @@ export default function Footer() {
     <footer className="bg-white border-t border-[#EADDCD] pt-20 pb-10 mt-auto relative overflow-hidden">
       {/* Decorative Blob */}
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-[#F7B538]/5 rounded-full blur-[100px] pointer-events-none translate-x-1/2 translate-y-1/2" />
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-16 lg:gap-12 mb-16">
 
@@ -74,7 +74,7 @@ export default function Footer() {
                 <div className="w-8 h-8 rounded-full bg-[#F1E6D8] flex items-center justify-center group-hover:bg-[#F7B538] transition-colors shrink-0">
                   <MapPin size={14} className="text-[#780116] group-hover:text-white" />
                 </div>
-                <span className="text-[#8E7B73] text-base font-medium leading-relaxed group-hover:text-[#2A0800] transition-colors">123 Culinary Hub, Food District, Delhi 110001</span>
+                <span className="text-[#8E7B73] text-base font-medium leading-relaxed group-hover:text-[#2A0800] transition-colors">Sector 62 Noida, Uttar Pradesh, India</span>
               </li>
               <li className="flex items-center gap-4 group cursor-pointer">
                 <div className="w-8 h-8 rounded-full bg-[#F1E6D8] flex items-center justify-center group-hover:bg-[#F7B538] transition-colors shrink-0">

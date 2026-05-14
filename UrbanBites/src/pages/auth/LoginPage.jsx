@@ -62,6 +62,7 @@ export default function LoginPage() {
   const [otpError, setOtpError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const otpRefs = React.useRef([]);
 
   const [sessionExpiredInfo, setSessionExpiredInfo] = useState(null);
@@ -69,6 +70,14 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const roleSource = searchParams.get('role');
+
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => setResendCooldown(c => c - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     try {
@@ -114,8 +123,9 @@ export default function LoginPage() {
     if (!validateEmail()) return;
     try {
       const res = await login({ email: formData.email, password: formData.password });
-      if (!res.isEmailVerified && res.role === 'CUSTOMER') {
+      if (!res.emailVerified) {
         setStep(5);
+        setResendCooldown(30);
         try { await authApi.requestEmailVerificationOtp(); } catch(e){}
         return;
       }
@@ -171,7 +181,12 @@ export default function LoginPage() {
     try {
       const resp = await authApi.verifyPhoneOtp({ phone: formData.phone, otp: code });
       useAuthStore.setState({
-        user: { email: resp.email, fullName: resp.fullName },
+        user: { 
+          email: resp.email, 
+          fullName: resp.fullName,
+          emailVerified: resp.emailVerified,
+          phoneVerified: resp.phoneVerified
+        },
         role: resp.role,
         token: resp.accessToken,
         isAuthenticated: true
@@ -196,7 +211,11 @@ export default function LoginPage() {
     setIsProcessingOtp(true);
     setOtpError('');
     try {
-      await authApi.verifyEmailOtp({ otp: code });
+      const resp = await authApi.verifyEmailOtp({ otp: code });
+      useAuthStore.setState((state) => ({
+        user: { ...state.user, emailVerified: true },
+        isAuthenticated: true
+      }));
       toast.success('Email verified!');
       const redirectTo = searchParams.get('redirect');
       const role = useAuthStore.getState().role;
@@ -217,6 +236,8 @@ export default function LoginPage() {
     try {
       await authApi.requestEmailVerificationOtp();
       setOtpDigits(['', '', '', '', '', '']);
+      setResendCooldown(30);
+      toast.success('OTP Resent!');
     } catch (err) {
       setOtpError(err.response?.data?.message || 'Failed to resend OTP.');
     } finally {
@@ -526,8 +547,12 @@ export default function LoginPage() {
 
                 <p className="text-center text-sm font-bold text-[#8E7B73] mt-6">
                   Didn't get it?{' '}
-                  <button onClick={resendEmailOtp} disabled={isProcessingOtp} className="text-[#F7B538] hover:text-[#780116] transition-colors disabled:opacity-50">
-                    Resend OTP
+                  <button 
+                    onClick={resendEmailOtp} 
+                    disabled={isProcessingOtp || resendCooldown > 0} 
+                    className="text-[#F7B538] hover:text-[#780116] transition-colors disabled:opacity-50"
+                  >
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
                   </button>
                 </p>
               </motion.div>

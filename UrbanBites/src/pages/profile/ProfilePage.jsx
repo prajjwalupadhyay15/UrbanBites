@@ -57,7 +57,7 @@ export default function ProfilePage() {
   const initial = (profile?.fullName || user?.fullName || 'U').charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-[#FFFCF5] pt-20 pb-16 font-sans">
+    <div className="min-h-screen bg-[#FFFCF5] pt-28 pb-16 font-sans">
       {/* Hero header */}
       <div className="relative overflow-hidden bg-white shadow-sm border-b border-[#EADDCD]">
         <div className="absolute inset-0 bg-gradient-to-b from-[#F7B538]/10 via-transparent to-transparent pointer-events-none" />
@@ -483,6 +483,7 @@ function EmailVerificationModal({ isOpen, onClose, email }) {
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState(1); // 1: request, 2: verify
   const [error, setError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const queryClient = useQueryClient();
 
   const requestMutation = useMutation({
@@ -490,8 +491,16 @@ function EmailVerificationModal({ isOpen, onClose, email }) {
     onSuccess: () => {
       setStep(2);
       setError('');
+      setResendCooldown(30);
     },
-    onError: (err) => setError(err.response?.data?.message || 'Failed to send OTP')
+    onError: (err) => {
+      if (err.response?.status === 429) {
+        setStep(2); // If already sent, move to input step
+        setError('An OTP was recently sent. Please check your email.');
+      } else {
+        setError(err.response?.data?.message || 'Failed to send OTP');
+      }
+    }
   });
 
   const verifyMutation = useMutation({
@@ -508,6 +517,14 @@ function EmailVerificationModal({ isOpen, onClose, email }) {
       requestMutation.mutate();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => setResendCooldown(c => c - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   if (!isOpen) return null;
 
@@ -532,9 +549,14 @@ function EmailVerificationModal({ isOpen, onClose, email }) {
             <button type="submit" disabled={verifyMutation.isPending} className="w-full py-3.5 rounded-xl bg-[#F7B538] text-[#780116] font-black text-sm shadow-premium hover:-translate-y-1 active:scale-[0.98] transition-all disabled:opacity-50">
               {verifyMutation.isPending ? 'Verifying...' : 'Verify Now'}
             </button>
-            <button type="button" onClick={() => requestMutation.mutate()} className="text-xs font-bold text-[#8E7B73] hover:text-[#780116] mt-4 block mx-auto underline">
-              Resend OTP
-            </button>
+             <button 
+               type="button" 
+               disabled={requestMutation.isPending || resendCooldown > 0} 
+               onClick={() => requestMutation.mutate()} 
+               className="text-xs font-bold text-[#8E7B73] hover:text-[#780116] mt-4 block mx-auto underline disabled:opacity-50"
+             >
+               {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
+             </button>
           </form>
         )}
       </motion.div>

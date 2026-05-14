@@ -287,6 +287,8 @@ class AdminControllerTest {
                 .andExpect(status().isCreated())
                 .andReturn();
 
+        markEmailVerified(email);
+
         return objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8))
                 .path("accessToken")
                 .asText();
@@ -298,7 +300,15 @@ class AdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
-        return userRepository.findByEmailIgnoreCase(email).orElseThrow();
+        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow();
+        user.setEmailVerified(true);
+        return userRepository.save(user);
+    }
+
+    private void markEmailVerified(String email) {
+        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow();
+        user.setEmailVerified(true);
+        userRepository.save(user);
     }
 
     private PricingRule buildRule(String version, boolean active) {
@@ -370,6 +380,8 @@ class AdminControllerTest {
         return prefix + "." + UUID.randomUUID() + "@example.com";
     }
 }
+
+
 
 
 

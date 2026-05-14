@@ -5,11 +5,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prajjwal.UrbanBites.UrbanBitesApplication;
 import com.prajjwal.UrbanBites.dto.request.RegisterRequest;
 import com.prajjwal.UrbanBites.entity.PricingRule;
+import com.prajjwal.UrbanBites.entity.Restaurant;
+import com.prajjwal.UrbanBites.entity.User;
+import com.prajjwal.UrbanBites.enums.ApprovalStatus;
 import com.prajjwal.UrbanBites.enums.PackingPolicyType;
 import com.prajjwal.UrbanBites.enums.PlatformFeeType;
 import com.prajjwal.UrbanBites.enums.Role;
 import com.prajjwal.UrbanBites.repository.MenuItemRepository;
 import com.prajjwal.UrbanBites.repository.PricingRuleRepository;
+import com.prajjwal.UrbanBites.repository.RestaurantRepository;
+import com.prajjwal.UrbanBites.repository.UserRepository;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -46,6 +51,12 @@ class CartControllerTest {
 
     @Autowired
     private MenuItemRepository menuItemRepository;
+
+    @Autowired
+    private RestaurantRepository restaurantRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Test
     void cartCrud_addUpdateRemoveClear_success() throws Exception {
@@ -305,7 +316,15 @@ class CartControllerTest {
                 .andExpect(status().isCreated())
                 .andReturn();
 
+        markEmailVerified(email);
+
         return objectMapper.readTree(result.getResponse().getContentAsString()).get("accessToken").asText();
+    }
+
+    private void markEmailVerified(String email) {
+        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow();
+        user.setEmailVerified(true);
+        userRepository.save(user);
     }
 
     private Long createRestaurant(String ownerToken, String name, String latitude, String longitude) throws Exception {
@@ -329,7 +348,12 @@ class CartControllerTest {
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
+        Long restaurantId = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
+        Restaurant restaurant = restaurantRepository.findById(restaurantId).orElseThrow();
+        restaurant.setActive(true);
+        restaurant.setApprovalStatus(ApprovalStatus.APPROVED.name());
+        restaurantRepository.save(restaurant);
+        return restaurantId;
     }
 
     private Long createMenuItem(String ownerToken, Long restaurantId, String name, String price) throws Exception {
@@ -383,8 +407,3 @@ class CartControllerTest {
         pricingRuleRepository.save(rule);
     }
 }
-
-
-
-
-

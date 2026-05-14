@@ -31,8 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TrackingService {
 
-    private static final Set<DispatchAssignmentStatus> TRACKABLE_AGENT_STATUSES =
-            EnumSet.of(DispatchAssignmentStatus.ACCEPTED, DispatchAssignmentStatus.PICKED_UP);
+    private static final Set<DispatchAssignmentStatus> TRACKABLE_AGENT_STATUSES = EnumSet
+            .of(DispatchAssignmentStatus.ACCEPTED, DispatchAssignmentStatus.PICKED_UP);
 
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
@@ -51,8 +51,7 @@ public class TrackingService {
             DispatchAssignmentRepository dispatchAssignmentRepository,
             DeliveryAgentProfileRepository deliveryAgentProfileRepository,
             TrackingProperties trackingProperties,
-            SimpMessagingTemplate messagingTemplate
-    ) {
+            SimpMessagingTemplate messagingTemplate) {
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
         this.orderTrackingPointRepository = orderTrackingPointRepository;
@@ -64,7 +63,8 @@ public class TrackingService {
     }
 
     @Transactional
-    public TrackingSnapshotResponse ingestLocationPing(String currentEmail, Long orderId, TrackingLocationPingRequest request) {
+    public TrackingSnapshotResponse ingestLocationPing(String currentEmail, Long orderId,
+            TrackingLocationPingRequest request) {
         dispatchService.assertAcceptedAssignmentForAgent(currentEmail, orderId);
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Order not found"));
@@ -80,8 +80,10 @@ public class TrackingService {
             return previous;
         }
 
-        BigDecimal latitude = normalizeCoordinate(previous == null ? null : previous.latitude(), request.latitude(), true);
-        BigDecimal longitude = normalizeCoordinate(previous == null ? null : previous.longitude(), request.longitude(), false);
+        BigDecimal latitude = normalizeCoordinate(previous == null ? null : previous.latitude(), request.latitude(),
+                true);
+        BigDecimal longitude = normalizeCoordinate(previous == null ? null : previous.longitude(), request.longitude(),
+                false);
         if (previous != null) {
             double jumpKm = haversineKm(previous.latitude(), previous.longitude(), latitude, longitude);
             if (jumpKm > trackingProperties.maxJumpKm()) {
@@ -90,7 +92,8 @@ public class TrackingService {
             }
         }
 
-        Integer etaMinutes = computeEtaMinutes(latitude, longitude, order.getDeliveryLatitude(), order.getDeliveryLongitude(), request.speedKmph());
+        Integer etaMinutes = computeEtaMinutes(latitude, longitude, order.getDeliveryLatitude(),
+                order.getDeliveryLongitude(), request.speedKmph());
         OrderTrackingPoint point = new OrderTrackingPoint();
         point.setOrderId(orderId);
         point.setAgentUserId(agent.getId());
@@ -137,21 +140,36 @@ public class TrackingService {
                         point.getSpeedKmph(),
                         point.getEtaMinutes(),
                         point.getOrderStatus(),
-                        point.getCreatedAt()
-                ))
+                        point.getCreatedAt()))
                 .toList();
     }
 
     @Transactional
-    public TrackingSnapshotResponse ingestLocationPingForActiveAssignment(String currentEmail, TrackingLocationPingRequest request) {
+    public TrackingSnapshotResponse ingestLocationPingForActiveAssignment(String currentEmail,
+            TrackingLocationPingRequest request) {
         User agent = getUserByEmail(currentEmail);
         if (!Role.DELIVERY_AGENT.equals(agent.getRole())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Only delivery agents can publish live location");
         }
 
+        // Update the agent's profile location regardless of whether they have an active assignment.
+        // This is crucial for the dispatch system to find "fresh" and "nearby" agents.
+        deliveryAgentProfileRepository.findByUserId(agent.getId()).ifPresent(profile -> {
+            profile.setLastLatitude(request.latitude());
+            profile.setLastLongitude(request.longitude());
+            profile.setLastLocationAt(OffsetDateTime.now());
+            deliveryAgentProfileRepository.save(profile);
+        });
+
         DispatchAssignment assignment = dispatchAssignmentRepository
                 .findTopByAgentUserIdAndStatusInOrderByCreatedAtDesc(agent.getId(), TRACKABLE_AGENT_STATUSES)
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "No active accepted delivery assignment found"));
+                .orElse(null);
+
+        if (assignment == null) {
+            // No active assignment, so we just return a minimal snapshot or null.
+            // The profile location is already updated above.
+            return null;
+        }
 
         return ingestLocationPing(currentEmail, assignment.getOrder().getId(), request);
     }
@@ -204,12 +222,14 @@ public class TrackingService {
         }
         if (Role.CUSTOMER.equals(user.getRole())) {
             orderRepository.findByIdAndUserId(orderId, user.getId())
-                    .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "Not allowed to access tracking for this order"));
+                    .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN,
+                            "Not allowed to access tracking for this order"));
             return;
         }
         if (Role.RESTAURANT_OWNER.equals(user.getRole())) {
             orderRepository.findByIdAndRestaurantOwnerId(orderId, user.getId())
-                    .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "Not allowed to access tracking for this order"));
+                    .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN,
+                            "Not allowed to access tracking for this order"));
             return;
         }
         if (Role.DELIVERY_AGENT.equals(user.getRole())) {
@@ -224,8 +244,7 @@ public class TrackingService {
             BigDecimal agentLongitude,
             BigDecimal destinationLatitude,
             BigDecimal destinationLongitude,
-            BigDecimal speedKmph
-    ) {
+            BigDecimal speedKmph) {
         if (destinationLatitude == null || destinationLongitude == null) {
             return null;
         }
@@ -257,8 +276,8 @@ public class TrackingService {
         double dLon = Math.toRadians(lon2.doubleValue() - lon1.doubleValue());
         double a = Math.pow(Math.sin(dLat / 2), 2)
                 + Math.cos(Math.toRadians(lat1.doubleValue()))
-                * Math.cos(Math.toRadians(lat2.doubleValue()))
-                * Math.pow(Math.sin(dLon / 2), 2);
+                        * Math.cos(Math.toRadians(lat2.doubleValue()))
+                        * Math.pow(Math.sin(dLon / 2), 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return 6371.0d * c;
     }
@@ -270,6 +289,7 @@ public class TrackingService {
                 point.getAgentUserId(),
                 contactInfo.name(),
                 contactInfo.phone(),
+                contactInfo.profilePictureUrl(),
                 point.getLatitude(),
                 point.getLongitude(),
                 order.getRestaurant() != null ? order.getRestaurant().getLatitude() : null,
@@ -278,8 +298,7 @@ public class TrackingService {
                 order.getDeliveryLongitude(),
                 point.getEtaMinutes(),
                 point.getOrderStatus(),
-                point.getCreatedAt()
-        );
+                point.getCreatedAt());
     }
 
     private TrackingSnapshotResponse buildFallbackSnapshot(Order order) {
@@ -300,6 +319,7 @@ public class TrackingService {
                 agentUserId,
                 contactInfo.name(),
                 contactInfo.phone(),
+                contactInfo.profilePictureUrl(),
                 profile != null ? profile.getLastLatitude() : null,
                 profile != null ? profile.getLastLongitude() : null,
                 order.getRestaurant() != null ? order.getRestaurant().getLatitude() : null,
@@ -308,11 +328,11 @@ public class TrackingService {
                 order.getDeliveryLongitude(),
                 order.getEtaMinutes(),
                 order.getStatus(),
-                resolveFallbackCapturedAt(order, profile, assignment)
-        );
+                resolveFallbackCapturedAt(order, profile, assignment));
     }
 
-    private OffsetDateTime resolveFallbackCapturedAt(Order order, DeliveryAgentProfile profile, DispatchAssignment assignment) {
+    private OffsetDateTime resolveFallbackCapturedAt(Order order, DeliveryAgentProfile profile,
+            DispatchAssignment assignment) {
         if (profile != null && profile.getLastLocationAt() != null) {
             return profile.getLastLocationAt();
         }
@@ -333,12 +353,11 @@ public class TrackingService {
             return AgentContactInfo.EMPTY;
         }
         return userRepository.findById(agentUserId)
-                .map(user -> new AgentContactInfo(user.getFullName(), user.getPhone()))
+                .map(user -> new AgentContactInfo(user.getFullName(), user.getPhone(), user.getProfilePictureUrl()))
                 .orElse(AgentContactInfo.EMPTY);
     }
 
-    private record AgentContactInfo(String name, String phone) {
-        private static final AgentContactInfo EMPTY = new AgentContactInfo(null, null);
+    private record AgentContactInfo(String name, String phone, String profilePictureUrl) {
+        private static final AgentContactInfo EMPTY = new AgentContactInfo(null, null, null);
     }
 }
-

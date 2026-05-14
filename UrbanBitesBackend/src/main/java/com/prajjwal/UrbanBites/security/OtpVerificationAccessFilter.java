@@ -26,14 +26,12 @@ public class OtpVerificationAccessFilter extends OncePerRequestFilter {
             "/api/v1/auth/email-verification/request-otp",
             "/api/v1/auth/email-verification/verify-otp",
             "/api/v1/users/me/phone/request-otp",
-            "/api/v1/users/me/phone/verify-otp"
-    );
+            "/api/v1/users/me/phone/verify-otp");
 
     /** Prefixes that cover wildcard public paths (login/*, password-reset/*) */
     private static final Set<String> ALLOWED_PATH_PREFIXES = Set.of(
             "/api/v1/auth/login/",
-            "/api/v1/auth/password-reset/"
-    );
+            "/api/v1/auth/password-reset/");
 
     private final UserRepository userRepository;
 
@@ -72,7 +70,7 @@ public class OtpVerificationAccessFilter extends OncePerRequestFilter {
         if (ALLOWED_EXACT_PATHS.contains(path)) {
             return true;
         }
-        // Check sub-paths of exact entries  (e.g. /api/v1/auth/refresh/<token>)
+        // Check sub-paths of exact entries (e.g. /api/v1/auth/refresh/<token>)
         if (ALLOWED_EXACT_PATHS.stream().anyMatch(allowed -> path.startsWith(allowed + "/"))) {
             return true;
         }
@@ -100,5 +98,3 @@ public class OtpVerificationAccessFilter extends OncePerRequestFilter {
         return user.isEmailVerified();
     }
 }
-
-

@@ -1,6 +1,7 @@
 package com.prajjwal.UrbanBites.dto.response;
 
 import java.time.OffsetDateTime;
+import com.prajjwal.UrbanBites.enums.ApprovalStatus;
 
 public record AdminRestaurantApprovalResponse(
         Long restaurantId,
@@ -8,7 +9,7 @@ public record AdminRestaurantApprovalResponse(
         String city,
         Long ownerId,
         String ownerEmail,
-        String approvalStatus,
+        ApprovalStatus approvalStatus,
         String approvalRejectionReason,
         OffsetDateTime createdAt
 ) {

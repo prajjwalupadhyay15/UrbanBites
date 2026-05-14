@@ -132,16 +132,20 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest request, String ipAddress, String userAgent, String locationLabel) {
-        User user = resolveLoginUser(request);
+        String loginIdentifier = normalizeEmail(request.email());
+        if (loginIdentifier == null) {
+            loginIdentifier = normalizePhone(request.phone());
+        }
 
         try {
             authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(user.getEmail(), request.password())
+                    new UsernamePasswordAuthenticationToken(loginIdentifier, request.password())
             );
         } catch (AuthenticationException ex) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
+        User user = resolveLoginUser(request);
         return finalizeSuccessfulLogin(user, ipAddress, userAgent, locationLabel);
     }
 
@@ -295,12 +299,8 @@ public class AuthService {
         String phone = normalizePhone(request.phone());
 
         if (email != null) {
-            User user = userRepository.findByEmailIgnoreCase(email)
+            return userRepository.findByEmailIgnoreCase(email)
                     .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
-            if (isEmailableAddress(user.getEmail()) && !user.isEmailVerified()) {
-                throw new ApiException(HttpStatus.FORBIDDEN, "Email not verified. Please verify OTP to continue.");
-            }
-            return user;
         }
 
         User user = userRepository.findByPhone(phone)
@@ -352,7 +352,15 @@ public class AuthService {
 
         updateLastLoginMetadata(user, context);
         userRepository.save(user);
-        return issueTokenPair(user, true);
+        
+        boolean loggedIn = true;
+        if (isEmailableAddress(user.getEmail()) && !user.isEmailVerified()) {
+            loggedIn = false;
+        } else if (user.getPhone() != null && !user.isPhoneVerified()) {
+            loggedIn = false;
+        }
+
+        return issueTokenPair(user, loggedIn);
     }
 
     private String normalizeEmail(String value) {
@@ -455,7 +463,9 @@ public class AuthService {
                 user.getEmail(),
                 user.getFullName(),
                 user.getRole(),
-                loggedIn
+                loggedIn,
+                user.isEmailVerified(),
+                user.isPhoneVerified()
         );
     }
 

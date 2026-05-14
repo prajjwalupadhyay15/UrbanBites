@@ -32,10 +32,15 @@ export const useAuthStore = create(
         try {
           const response = await authApi.login(credentials);
           set({
-            user: { email: response.email, fullName: response.fullName },
+            user: { 
+              email: response.email, 
+              fullName: response.fullName,
+              emailVerified: response.emailVerified,
+              phoneVerified: response.phoneVerified
+            },
             role: response.role,
             token: response.accessToken,
-            isAuthenticated: true,
+            isAuthenticated: response.loggedIn,
             isLoading: false,
           });
           localStorage.setItem('token', response.accessToken);
@@ -54,10 +59,15 @@ export const useAuthStore = create(
         try {
           const response = await authApi.register(data);
           set({
-            user: { email: response.email, fullName: response.fullName },
+            user: { 
+              email: response.email, 
+              fullName: response.fullName,
+              emailVerified: response.emailVerified,
+              phoneVerified: response.phoneVerified
+            },
             role: response.role,
             token: response.accessToken,
-            isAuthenticated: true,
+            isAuthenticated: response.loggedIn,
             isLoading: false,
           });
           localStorage.setItem('token', response.accessToken);

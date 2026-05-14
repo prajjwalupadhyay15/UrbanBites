@@ -6,6 +6,8 @@ import com.prajjwal.UrbanBites.dto.request.LoginRequest;
 import com.prajjwal.UrbanBites.dto.request.RegisterRequest;
 import com.prajjwal.UrbanBites.enums.OtpPurpose;
 import com.prajjwal.UrbanBites.enums.Role;
+import com.prajjwal.UrbanBites.entity.User;
+import com.prajjwal.UrbanBites.repository.UserRepository;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,9 @@ class UserControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @Test
     void me_requiresAuthAndReturnsProfile() throws Exception {
         RegisterRequest registerRequest = new RegisterRequest(
@@ -51,6 +56,7 @@ class UserControllerTest {
                 .andReturn();
 
         String token = objectMapper.readTree(registerResult.getResponse().getContentAsString()).get("accessToken").asText();
+        markEmailVerified("customer2@example.com");
 
         mockMvc.perform(get("/api/v1/users/me")
                         .header("Authorization", "Bearer " + token))
@@ -75,6 +81,7 @@ class UserControllerTest {
                 .andReturn();
 
         String token = objectMapper.readTree(registerResult.getResponse().getContentAsString()).get("accessToken").asText();
+        markEmailVerified("customer3@example.com");
 
         MockMultipartFile profileImage = new MockMultipartFile(
                 "profileImage",
@@ -152,6 +159,7 @@ class UserControllerTest {
                 .andReturn();
 
         String token = objectMapper.readTree(registerResult.getResponse().getContentAsString()).get("accessToken").asText();
+        markEmailVerified("customer5@example.com");
 
         Map<String, Object> firstAddress = Map.of(
                 "label", "Home",
@@ -235,11 +243,17 @@ class UserControllerTest {
                 .andReturn();
 
         String token = objectMapper.readTree(registerResult.getResponse().getContentAsString()).get("accessToken").asText();
+        markEmailVerified("owner1@example.com");
 
-        mockMvc.perform(get("/api/v1/users/me/addresses")
+        long addressId = 1L;
+        mockMvc.perform(delete("/api/v1/users/me/addresses/{addressId}", addressId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
     }
+
+    private void markEmailVerified(String email) {
+        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow();
+        user.setEmailVerified(true);
+        userRepository.save(user);
+    }
 }
-
-

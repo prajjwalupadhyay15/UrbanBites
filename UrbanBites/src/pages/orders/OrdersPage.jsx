@@ -40,7 +40,7 @@ export default function OrdersPage() {
 
   return (
     <div className="min-h-screen bg-[#FFFCF5]">
-      <div className="max-w-4xl mx-auto py-10 px-4 sm:px-6 w-full">
+      <div className="max-w-4xl mx-auto pt-28 pb-10 px-4 sm:px-6 w-full">
         <h1 className="text-4xl font-black text-[#780116] mb-2 font-display tracking-tight">Your Orders</h1>
         <p className="text-[#8E7B73] font-bold text-sm mb-10">View and track all your past and current orders.</p>
 

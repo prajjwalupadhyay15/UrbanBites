@@ -66,6 +66,7 @@ export default function RegisterPage() {
   const [validationErrors, setValidationErrors] = useState({});
   const [otpError, setOtpError] = useState('');
   const [isProcessingOtp, setIsProcessingOtp] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const otpRefs = useRef([]);
 
   const { register, isLoading, error, clearError } = useAuthStore();
@@ -73,6 +74,14 @@ export default function RegisterPage() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => { clearError(); setValidationErrors({}); setOtpError(''); }, [method, step]);
+
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => setResendCooldown(c => c - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const handleChange = (e) => {
     clearError();
@@ -105,6 +114,7 @@ export default function RegisterPage() {
       setOtpDigits(['', '', '', '', '', '']);
       setOtpError('');
       setStep(4);
+      setResendCooldown(30);
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Registration failed');
     }
@@ -155,7 +165,12 @@ export default function RegisterPage() {
     try {
       const resp = await authApi.verifyPhoneOtp({ phone: formData.phone, otp: code });
       useAuthStore.setState({
-        user: { email: resp.email, fullName: resp.fullName },
+        user: { 
+          email: resp.email, 
+          fullName: resp.fullName,
+          emailVerified: resp.emailVerified,
+          phoneVerified: resp.phoneVerified
+        },
         role: resp.role,
         token: resp.accessToken,
         isAuthenticated: true
@@ -180,7 +195,11 @@ export default function RegisterPage() {
     setIsProcessingOtp(true);
     setOtpError('');
     try {
-      await authApi.verifyEmailOtp({ otp: code });
+      const resp = await authApi.verifyEmailOtp({ otp: code });
+      useAuthStore.setState((state) => ({
+        user: { ...state.user, emailVerified: true },
+        isAuthenticated: true
+      }));
       toast.success('Email verified! Welcome!');
       const redirectTo = searchParams.get('redirect');
       const role = useAuthStore.getState().role;
@@ -202,6 +221,8 @@ export default function RegisterPage() {
       await authApi.requestEmailVerificationOtp();
       setOtpError('');
       setOtpDigits(['', '', '', '', '', '']);
+      setResendCooldown(30);
+      toast.success('OTP Resent!');
     } catch (err) {
       setOtpError(err.response?.data?.message || 'Failed to resend OTP.');
     } finally {
@@ -402,7 +423,13 @@ export default function RegisterPage() {
 
                 <p className="text-center text-sm font-bold text-[#8E7B73] mt-6">
                   Didn't get it?{' '}
-                  <button onClick={resendEmailOtp} disabled={isProcessingOtp} className="text-[#F7B538] hover:text-[#780116] transition-colors disabled:opacity-50">Resend OTP</button>
+                  <button 
+                    onClick={resendEmailOtp} 
+                    disabled={isProcessingOtp || resendCooldown > 0} 
+                    className="text-[#F7B538] hover:text-[#780116] transition-colors disabled:opacity-50"
+                  >
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
+                  </button>
                 </p>
               </motion.div>
             )}

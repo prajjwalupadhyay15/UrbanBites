@@ -3,6 +3,8 @@ package com.prajjwal.UrbanBites.dto.response;
 import java.math.BigDecimal;
 import java.util.List;
 
+import com.prajjwal.UrbanBites.enums.ApprovalStatus;
+
 public record RestaurantResponse(
         Long id,
         String name,
@@ -17,7 +19,8 @@ public record RestaurantResponse(
         BigDecimal avgRating,
         Integer ratingCount,
         Double distanceKm,
-        List<String> categories
+        List<String> categories,
+        ApprovalStatus approvalStatus
 ) {
 }
 

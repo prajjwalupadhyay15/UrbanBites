@@ -3,6 +3,8 @@ package com.prajjwal.UrbanBites.entity;
 import com.prajjwal.UrbanBites.enums.ApprovalStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -29,6 +31,10 @@ public class DeliveryAgentProfile {
 
     @Column(nullable = false)
     private boolean verified = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", nullable = false)
+    private ApprovalStatus approvalStatus = ApprovalStatus.PENDING;
 
     @Column(nullable = false)
     private boolean online = false;
@@ -78,30 +84,111 @@ public class DeliveryAgentProfile {
         this.updatedAt = OffsetDateTime.now();
     }
 
-    public Long getId() { return id; }
-    public User getUser() { return user; }
-    public void setUser(User user) { this.user = user; }
-    public boolean isVerified() { return verified; }
-    public void setVerified(boolean verified) { this.verified = verified; }
-    public boolean isOnline() { return online; }
-    public void setOnline(boolean online) { this.online = online; }
-    public boolean isAvailable() { return available; }
-    public void setAvailable(boolean available) { this.available = available; }
-    public int getCurrentLoad() { return currentLoad; }
-    public void setCurrentLoad(int currentLoad) { this.currentLoad = currentLoad; }
-    public String getTransportType() { return transportType; }
-    public void setTransportType(String transportType) { this.transportType = transportType; }
-    public boolean isActiveShift() { return activeShift; }
-    public void setActiveShift(boolean activeShift) { this.activeShift = activeShift; }
-    public BigDecimal getLastLatitude() { return lastLatitude; }
-    public void setLastLatitude(BigDecimal lastLatitude) { this.lastLatitude = lastLatitude; }
-    public BigDecimal getLastLongitude() { return lastLongitude; }
-    public void setLastLongitude(BigDecimal lastLongitude) { this.lastLongitude = lastLongitude; }
-    public OffsetDateTime getLastLocationAt() { return lastLocationAt; }
-    public void setLastLocationAt(OffsetDateTime lastLocationAt) { this.lastLocationAt = lastLocationAt; }
-    public OffsetDateTime getLastAssignedAt() { return lastAssignedAt; }
-    public void setLastAssignedAt(OffsetDateTime lastAssignedAt) { this.lastAssignedAt = lastAssignedAt; }
-    public String getApprovalRejectionReason() { return approvalRejectionReason; }
-    public void setApprovalRejectionReason(String approvalRejectionReason) { this.approvalRejectionReason = approvalRejectionReason; }
-}
+    public Long getId() {
+        return id;
+    }
 
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public boolean isVerified() {
+        return verified;
+    }
+
+    public void setVerified(boolean verified) {
+        this.verified = verified;
+    }
+
+    public boolean isOnline() {
+        return online;
+    }
+
+    public void setOnline(boolean online) {
+        this.online = online;
+    }
+
+    public boolean isAvailable() {
+        return available;
+    }
+
+    public void setAvailable(boolean available) {
+        this.available = available;
+    }
+
+    public int getCurrentLoad() {
+        return currentLoad;
+    }
+
+    public void setCurrentLoad(int currentLoad) {
+        this.currentLoad = currentLoad;
+    }
+
+    public String getTransportType() {
+        return transportType;
+    }
+
+    public void setTransportType(String transportType) {
+        this.transportType = transportType;
+    }
+
+    public boolean isActiveShift() {
+        return activeShift;
+    }
+
+    public void setActiveShift(boolean activeShift) {
+        this.activeShift = activeShift;
+    }
+
+    public BigDecimal getLastLatitude() {
+        return lastLatitude;
+    }
+
+    public void setLastLatitude(BigDecimal lastLatitude) {
+        this.lastLatitude = lastLatitude;
+    }
+
+    public BigDecimal getLastLongitude() {
+        return lastLongitude;
+    }
+
+    public void setLastLongitude(BigDecimal lastLongitude) {
+        this.lastLongitude = lastLongitude;
+    }
+
+    public OffsetDateTime getLastLocationAt() {
+        return lastLocationAt;
+    }
+
+    public void setLastLocationAt(OffsetDateTime lastLocationAt) {
+        this.lastLocationAt = lastLocationAt;
+    }
+
+    public OffsetDateTime getLastAssignedAt() {
+        return lastAssignedAt;
+    }
+
+    public void setLastAssignedAt(OffsetDateTime lastAssignedAt) {
+        this.lastAssignedAt = lastAssignedAt;
+    }
+
+    public String getApprovalRejectionReason() {
+        return approvalRejectionReason;
+    }
+
+    public void setApprovalRejectionReason(String approvalRejectionReason) {
+        this.approvalRejectionReason = approvalRejectionReason;
+    }
+
+    public ApprovalStatus getApprovalStatus() {
+        return approvalStatus;
+    }
+
+    public void setApprovalStatus(ApprovalStatus approvalStatus) {
+        this.approvalStatus = approvalStatus;
+    }
+}

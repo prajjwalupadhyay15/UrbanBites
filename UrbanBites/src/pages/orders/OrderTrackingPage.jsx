@@ -82,7 +82,7 @@ function MapBoundsUpdater({ restaurant, customer, agent }) {
       if (restaurant) points.push(restaurant);
       if (customer) points.push(customer);
       if (agent) points.push(agent);
-      
+
       if (points.length > 0) {
         const bounds = L.latLngBounds(points);
         map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 16, duration: 1.5 });
@@ -153,19 +153,19 @@ export default function OrderTrackingPage() {
           qc.setQueryData(['orderSnapshot', id], snapshot);
         }
       });
-      
+
       // 2. Subscribe to status updates (CONFIRMED, PREPARING, DELIVERED, etc)
       stompClient.subscribe(`/topic/orders/${id}/status`, (message) => {
         if (message.body) {
           const event = JSON.parse(message.body);
           if (event.payload) {
-             // Directly overwrite the react-query cache for instant UI refresh
-             qc.setQueryData(['order', id], event.payload);
-             
-             // Also optionally trigger a refetch just to be perfectly synced
-             qc.invalidateQueries({ queryKey: ['order', id] });
-             // Invalidate tracking snapshot as well in case status caused delivery completion
-             qc.invalidateQueries({ queryKey: ['orderSnapshot', id] });
+            // Directly overwrite the react-query cache for instant UI refresh
+            qc.setQueryData(['order', id], event.payload);
+
+            // Also optionally trigger a refetch just to be perfectly synced
+            qc.invalidateQueries({ queryKey: ['order', id] });
+            // Invalidate tracking snapshot as well in case status caused delivery completion
+            qc.invalidateQueries({ queryKey: ['orderSnapshot', id] });
           }
         }
       });
@@ -271,22 +271,22 @@ export default function OrderTrackingPage() {
       if (prevAgentPos.current) {
         const [prevLat, prevLng] = prevAgentPos.current;
         if (prevLat !== agentLat || prevLng !== agentLng) {
-           const lat1 = prevLat * Math.PI / 180;
-           const lat2 = agentLat * Math.PI / 180;
-           const dLon = (agentLng - prevLng) * Math.PI / 180;
-           const y = Math.sin(dLon) * Math.cos(lat2);
-           const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-           let bearing = Math.atan2(y, x) * 180 / Math.PI;
-           bearing = (bearing + 360) % 360;
-           
-           // Don't rotate if distance is super tiny to avoid jitter
-           if (Math.abs(agentLat - prevLat) > 0.00001 || Math.abs(agentLng - prevLng) > 0.00001) {
-             currentHeading.current = bearing;
-           }
-           setDynamicAgentIcon(createAgentIconSized(currentHeading.current));
+          const lat1 = prevLat * Math.PI / 180;
+          const lat2 = agentLat * Math.PI / 180;
+          const dLon = (agentLng - prevLng) * Math.PI / 180;
+          const y = Math.sin(dLon) * Math.cos(lat2);
+          const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+          let bearing = Math.atan2(y, x) * 180 / Math.PI;
+          bearing = (bearing + 360) % 360;
+
+          // Don't rotate if distance is super tiny to avoid jitter
+          if (Math.abs(agentLat - prevLat) > 0.00001 || Math.abs(agentLng - prevLng) > 0.00001) {
+            currentHeading.current = bearing;
+          }
+          setDynamicAgentIcon(createAgentIconSized(currentHeading.current));
         }
       } else {
-         setDynamicAgentIcon(createAgentIconSized(0));
+        setDynamicAgentIcon(createAgentIconSized(0));
       }
       prevAgentPos.current = [agentLat, agentLng];
     }
@@ -313,16 +313,16 @@ export default function OrderTrackingPage() {
     <div className="min-h-screen bg-[#FFFCF5] text-[#2A0800] flex flex-col md:flex-row">
       {/* MAP SECTION - Left on desktop, Top on mobile */}
       <div className="h-[40vh] md:h-screen md:flex-1 relative z-0">
-        <button 
+        <button
           onClick={() => navigate('/orders')}
           className="absolute top-6 left-6 z-[1000] bg-white p-3 rounded-xl shadow-sm hover:bg-[#FDF9F1] hover:border-[#F7B538] transition-all border border-[#EADDCD] text-[#780116]"
         >
           <ArrowLeft size={20} />
         </button>
 
-        <MapContainer 
+        <MapContainer
           center={[28.7041, 77.1025]} // Default Delhi 
-          zoom={13} 
+          zoom={13}
           style={{ height: "100%", width: "100%", zIndex: 0 }}
           zoomControl={false}
         >
@@ -331,7 +331,7 @@ export default function OrderTrackingPage() {
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           />
-          
+
           <MapBoundsUpdater restaurant={restaurantPos} customer={customerPos} agent={agentPos} />
 
           {restaurantPos && (
@@ -395,13 +395,13 @@ export default function OrderTrackingPage() {
 
           {/* Ultimate fallback: straight line if no OSRM route */}
           {!routeCoords && !fullRouteData && customerPos && (agentPos || restaurantPos) && !isDelivered && (
-             <Polyline
-               positions={[agentPos || restaurantPos, customerPos]}
-               pathOptions={{ color: '#F7B538', dashArray: '10, 10', weight: 4, opacity: 0.7 }}
-             />
+            <Polyline
+              positions={[agentPos || restaurantPos, customerPos]}
+              pathOptions={{ color: '#F7B538', dashArray: '10, 10', weight: 4, opacity: 0.7 }}
+            />
           )}
         </MapContainer>
-        
+
         {/* Overlay when no tracking data */}
         {!trackerData && !isDelivered && !isCancelled && (
           <div className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none">
@@ -420,7 +420,7 @@ export default function OrderTrackingPage() {
       </div>
 
       {/* TRACKING DETAILS PANEL - Right on desktop, Bottom on mobile */}
-      <motion.div 
+      <motion.div
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         className="flex-1 max-w-md w-full bg-[#FFFCF5] z-20 md:border-l md:border-[#EADDCD] flex flex-col pt-10 md:pt-12 pb-4 px-5 relative rounded-t-[2rem] md:rounded-none md:h-screen md:overflow-y-auto shadow-[0_-10px_40px_rgba(0,0,0,0.05)] md:shadow-none"
@@ -441,13 +441,13 @@ export default function OrderTrackingPage() {
         </div>
 
         {isCancelled ? (
-            <div className="bg-red-50 border border-red-200 shadow-sm rounded-[1.5rem] p-6 text-center mb-6">
-               <div className="w-16 h-16 bg-white border border-red-200 text-red-600 shadow-sm rounded-full flex items-center justify-center mx-auto mb-4">
-                 <CheckCircle2 size={32} />
-               </div>
-               <h3 className="text-2xl font-black text-red-700 mb-2">Order Cancelled</h3>
-               <p className="text-red-600/80 font-bold">This order has been cancelled.</p>
+          <div className="bg-red-50 border border-red-200 shadow-sm rounded-[1.5rem] p-6 text-center mb-6">
+            <div className="w-16 h-16 bg-white border border-red-200 text-red-600 shadow-sm rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 size={32} />
             </div>
+            <h3 className="text-2xl font-black text-red-700 mb-2">Order Cancelled</h3>
+            <p className="text-red-600/80 font-bold">This order has been cancelled.</p>
+          </div>
         ) : (
           <>
             <div className="flex flex-col gap-4 mb-6">
@@ -469,7 +469,7 @@ export default function OrderTrackingPage() {
                     <div className="flex justify-between items-center">
                       <div>
                         <h3 className="text-[#8E7B73] font-bold text-xs mb-1 flex items-center gap-1.5">
-                           <Clock size={14} className="text-[#F7B538]" /> Arriving in
+                          <Clock size={14} className="text-[#F7B538]" /> Arriving in
                         </h3>
                         <div className="flex items-end gap-2">
                           <span className="text-4xl font-black font-display text-[#780116] tracking-tighter leading-none">
@@ -495,8 +495,16 @@ export default function OrderTrackingPage() {
               {trackerData?.agentName && !isCancelled && (
                 <div className="bg-white border border-[#EADDCD] shadow-sm rounded-[1.5rem] p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-[#FDF9F1] border border-[#F7B538]/30 rounded-full flex items-center justify-center text-[#F7B538]">
-                      <User size={24} />
+                    <div className="w-12 h-12 bg-[#FDF9F1] border border-[#F7B538]/30 rounded-full flex items-center justify-center text-[#F7B538] overflow-hidden">
+                      {trackerData.agentProfilePictureUrl ? (
+                        <img
+                          src={trackerData.agentProfilePictureUrl}
+                          alt={trackerData.agentName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <User size={24} />
+                      )}
                     </div>
                     <div>
                       <p className="text-[#8E7B73] text-[10px] font-black uppercase tracking-widest mb-0.5">Delivery Partner</p>
@@ -522,13 +530,12 @@ export default function OrderTrackingPage() {
                 return (
                   <div key={step.id} className="relative">
                     {/* Circle Node */}
-                    <div 
-                      className={`absolute -left-[35px] w-6 h-6 rounded-full border-2 flex items-center justify-center bg-white transition-colors duration-500 shadow-sm ${
-                        isCompleted ? 'border-[#F7B538]' : 'border-[#EADDCD]'
-                      }`}
+                    <div
+                      className={`absolute -left-[35px] w-6 h-6 rounded-full border-2 flex items-center justify-center bg-white transition-colors duration-500 shadow-sm ${isCompleted ? 'border-[#F7B538]' : 'border-[#EADDCD]'
+                        }`}
                     >
                       {isCompleted ? (
-                         <div className="w-2.5 h-2.5 bg-[#F7B538] rounded-full"></div>
+                        <div className="w-2.5 h-2.5 bg-[#F7B538] rounded-full"></div>
                       ) : null}
                     </div>
 
@@ -546,7 +553,7 @@ export default function OrderTrackingPage() {
                 );
               })}
             </div>
-            
+
             {/* Order Items & Delivery Address Toggle */}
             <details className="group border border-[#EADDCD] rounded-2xl bg-white shadow-sm overflow-hidden mb-8">
               <summary className="flex items-center justify-between p-4 cursor-pointer font-black text-[#780116] list-none select-none">

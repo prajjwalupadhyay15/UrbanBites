@@ -5,8 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prajjwal.UrbanBites.UrbanBitesApplication;
 import com.prajjwal.UrbanBites.dto.request.RegisterRequest;
 import com.prajjwal.UrbanBites.entity.Restaurant;
+import com.prajjwal.UrbanBites.entity.User;
+import com.prajjwal.UrbanBites.enums.ApprovalStatus;
 import com.prajjwal.UrbanBites.enums.Role;
 import com.prajjwal.UrbanBites.repository.RestaurantRepository;
+import com.prajjwal.UrbanBites.repository.UserRepository;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -38,6 +41,9 @@ class RestaurantPhase4ControllerTest {
     @Autowired
     private RestaurantRepository restaurantRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @Test
     void ownerCanUploadRestaurantAndMenuImages_andDiscoverByLocation() throws Exception {
         String ownerToken = registerAndGetAccessToken("owner.phase4@example.com", Role.RESTAURANT_OWNER);
@@ -66,6 +72,7 @@ class RestaurantPhase4ControllerTest {
         JsonNode restaurantJson = objectMapper.readTree(restaurantResult.getResponse().getContentAsString());
         Long restaurantId = restaurantJson.get("id").asLong();
         String restaurantImagePath = restaurantJson.get("imagePath").asText();
+        activateRestaurant(restaurantId);
 
         MockMultipartFile menuImage = new MockMultipartFile(
                 "image",
@@ -175,7 +182,14 @@ class RestaurantPhase4ControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andReturn();
+        markEmailVerified(email);
         return objectMapper.readTree(result.getResponse().getContentAsString()).get("accessToken").asText();
+    }
+
+    private void markEmailVerified(String email) {
+        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow();
+        user.setEmailVerified(true);
+        userRepository.save(user);
     }
 
     private Long createRestaurant(String token, String name, String latitude, String longitude) throws Exception {
@@ -197,7 +211,9 @@ class RestaurantPhase4ControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated())
                 .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
+        Long restaurantId = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
+        activateRestaurant(restaurantId);
+        return restaurantId;
     }
 
     private void createMenuItem(String token, Long restaurantId, String itemName, String price, boolean veg) throws Exception {
@@ -224,5 +240,11 @@ class RestaurantPhase4ControllerTest {
         restaurant.setRatingCount(ratingCount);
         restaurantRepository.save(restaurant);
     }
-}
 
+    private void activateRestaurant(Long restaurantId) {
+        Restaurant restaurant = restaurantRepository.findById(restaurantId).orElseThrow();
+        restaurant.setActive(true);
+        restaurant.setApprovalStatus(ApprovalStatus.APPROVED.name());
+        restaurantRepository.save(restaurant);
+    }
+}

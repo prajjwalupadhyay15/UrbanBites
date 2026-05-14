@@ -131,9 +131,20 @@ public class DispatchService {
                 .map(User::getId)
                 .collect(Collectors.toSet());
 
-        DeliveryAgentProfile selected = selectBestCandidate(order, triedAgentIds);
-        if (selected == null) {
+        DeliveryAgentProfile best = selectBestCandidate(order, triedAgentIds);
+        if (best == null) {
             createNoAgentFallback(order, nextAttempt, retryUntil, "No eligible delivery agent available");
+            return;
+        }
+
+        // Lock the profile and re-verify availability to prevent race conditions
+        DeliveryAgentProfile selected = deliveryAgentProfileRepository.findByIdForUpdate(best.getId())
+                .filter(p -> p.isAvailable() && p.isOnline() && p.getApprovalStatus() == ApprovalStatus.APPROVED)
+                .orElse(null);
+
+        if (selected == null) {
+            // Agent became unavailable between selection and locking, retry the whole process
+            triggerDispatchForOrder(orderId);
             return;
         }
 
@@ -644,9 +655,11 @@ public class DispatchService {
         OffsetDateTime staleBefore = OffsetDateTime.now().minusSeconds(dispatchProperties.maxLocationAgeSeconds());
 
         List<DeliveryAgentProfile> candidates = deliveryAgentProfileRepository
-                .findByVerifiedTrueAndOnlineTrueAndAvailableTrueAndActiveShiftTrueOrderByCurrentLoadAscIdAsc();
+                .findByApprovalStatusAndOnlineTrueAndAvailableTrueAndActiveShiftTrueOrderByCurrentLoadAscIdAsc(ApprovalStatus.APPROVED);
+        
         if (candidates.isEmpty()) {
-            candidates = deliveryAgentProfileRepository.findByOnlineTrueAndAvailableTrueOrderByCurrentLoadAscIdAsc();
+            candidates = deliveryAgentProfileRepository
+                .findByApprovalStatusAndOnlineTrueAndAvailableTrueOrderByCurrentLoadAscIdAsc(ApprovalStatus.APPROVED);
         }
 
         // Selection Algorithm (Multi-variable scoring):

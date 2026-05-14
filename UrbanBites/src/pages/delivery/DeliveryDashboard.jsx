@@ -125,7 +125,7 @@ export default function DeliveryDashboard() {
     retry: false,
   });
 
-  const { data: transactions = [] } = useQuery({
+  const { data: transactions = [], isLoading: txLoading } = useQuery({
     queryKey: ['delivery-finance-transactions'],
     queryFn: dispatchApi.getFinanceTransactions,
     enabled: activeTab === 'finance',
@@ -173,7 +173,7 @@ export default function DeliveryDashboard() {
     onError: (err) => {
       if (err?.response?.status === 403) {
         setApprovalError(err?.response?.data?.message || 'Your account is pending admin approval.');
-        toast.error('Account pending approval');
+        toast.error('Pending review, can\'t go online');
       } else {
         setApprovalError('');
         toast.error('Failed to update availability');
@@ -248,6 +248,16 @@ export default function DeliveryDashboard() {
     }
     return () => { if (watchId !== undefined) navigator.geolocation.clearWatch(watchId); };
   }, [isOnline, user?.id, assignment?.orderId]);
+
+  // ── Auto-refresh data when tabs are switched ──────────────────────────────
+  useEffect(() => {
+    if (activeTab === 'history') {
+      qc.invalidateQueries({ queryKey: ['delivery-order-history'] });
+    } else if (activeTab === 'finance') {
+      qc.invalidateQueries({ queryKey: ['delivery-finance-summary'] });
+      qc.invalidateQueries({ queryKey: ['delivery-finance-transactions'] });
+    }
+  }, [activeTab, qc]);
 
   const handleToggleOnline = () => {
     const goOnline = !isOnline;
@@ -324,7 +334,7 @@ export default function DeliveryDashboard() {
           <motion.button
             initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
             onClick={handleToggleOnline}
-            disabled={availabilityMut.isPending}
+            disabled={availabilityMut.isPending || approvalStatus === 'REJECTED'}
             className={`self-start px-6 py-3 border rounded-full font-black flex items-center gap-2 transition-all shadow-sm disabled:opacity-50 ${
               isOnline
                 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700'
@@ -332,7 +342,7 @@ export default function DeliveryDashboard() {
             }`}
           >
             <span className={`w-2.5 h-2.5 rounded-full border border-white ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-[#D2C5B8]'}`} />
-            {availabilityMut.isPending ? 'Updating…' : isOnline ? 'Online — Go Offline' : 'Go Online'}
+            {availabilityMut.isPending ? 'Updating…' : isOnline ? 'Online — Go Offline' : approvalStatus === 'REJECTED' ? 'Account Rejected' : 'Go Online'}
           </motion.button>
         </div>
 
@@ -729,6 +739,29 @@ export default function DeliveryDashboard() {
           {activeTab === 'finance' && (
             <motion.div key="finance" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
               
+              <div className="flex justify-between items-center bg-white p-4 rounded-3xl border border-[#EADDCD]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#FDF9F1] flex items-center justify-center border border-[#F7B538]/30">
+                    <CreditCard size={20} className="text-[#F7B538]" />
+                  </div>
+                  <div>
+                    <h3 className="text-[#780116] font-black leading-tight">Earnings Dashboard</h3>
+                    <p className="text-[#8E7B73] text-[10px] font-bold uppercase tracking-widest">Live financial status</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    qc.invalidateQueries({ queryKey: ['delivery-finance-summary'] });
+                    qc.invalidateQueries({ queryKey: ['delivery-finance-transactions'] });
+                  }}
+                  disabled={financeLoading || txLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-black text-[#780116] bg-[#FDF9F1] border border-[#EADDCD] rounded-2xl hover:bg-[#F7B538]/10 disabled:opacity-50 transition-all active:scale-95"
+                >
+                  <RefreshCw size={16} className={financeLoading || txLoading ? 'animate-spin' : ''} />
+                  <span>REFRESH</span>
+                </button>
+              </div>
+
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[

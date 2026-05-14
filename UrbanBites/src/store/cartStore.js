@@ -34,29 +34,8 @@ export const useCartStore = create(
         });
       },
 
-      /** Optimistic add — called before the API response arrives */
       addItem: (item, resId, resName) =>
         set((state) => {
-          // Cross-restaurant guard
-          if (
-            state.restaurantId &&
-            state.restaurantId !== resId &&
-            state.items.length > 0
-          ) {
-            if (
-              !window.confirm(
-                `Your cart has items from "${state.restaurantName}". Clear cart and add from new restaurant?`
-              )
-            )
-              return state;
-            // Clear and add fresh
-            return {
-              items: [{ ...item, quantity: 1 }],
-              restaurantId: resId,
-              restaurantName: resName ?? null,
-            };
-          }
-
           const existing = state.items.find((i) => i.id === item.id);
           if (existing) {
             return {
