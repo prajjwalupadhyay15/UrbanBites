@@ -14,6 +14,5 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 
-EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java -Xmx256m -Xss512k -XX:MaxMetaspaceSize=128m -Dserver.port=${PORT:-8080} -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "java -Xmx256m -Xss512k -XX:MaxMetaspaceSize=128m -Dserver.port=${PORT:-10000} -Dserver.address=0.0.0.0 -jar app.jar"]
 
