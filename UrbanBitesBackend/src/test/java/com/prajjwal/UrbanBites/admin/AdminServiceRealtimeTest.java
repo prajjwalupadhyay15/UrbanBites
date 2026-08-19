@@ -56,6 +56,7 @@ class AdminServiceRealtimeTest {
     @Mock private com.prajjwal.UrbanBites.repository.OrderItemRepository orderItemRepository;
     @Mock private com.prajjwal.UrbanBites.service.PaymentGatewayClient paymentGatewayClient;
     @Mock private com.prajjwal.UrbanBites.service.EmailSender emailSender;
+    @Mock private com.prajjwal.UrbanBites.service.WalletService walletService;
 
     private AdminService adminService;
 
@@ -80,7 +81,8 @@ class AdminServiceRealtimeTest {
                 realtimePublisher,
                 messagingTemplate,
                 paymentGatewayClient,
-                emailSender
+                emailSender,
+                walletService
         );
     }
 
