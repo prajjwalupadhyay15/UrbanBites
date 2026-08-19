@@ -25,7 +25,8 @@ public record OrderResponse(
         OffsetDateTime etaUpdatedAt,
         String pricingRuleVersion,
         PaymentResponse payment,
-        List<OrderItemResponse> items
+        List<OrderItemResponse> items,
+        boolean reviewed
 ) {
 }
 

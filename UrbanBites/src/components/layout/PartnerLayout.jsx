@@ -6,7 +6,7 @@ import { userApi } from '../../api/userApi';
 import {
   LayoutDashboard, Store, User, Map, LogOut, Plus, ChefHat, Bike, ShieldCheck,
   DollarSign, Activity, AlertTriangle, Ticket, MessageSquare, Users, MapPin,
-  ClipboardList, History, CreditCard, Package
+  ClipboardList, History, CreditCard, Package, Star
 } from 'lucide-react';
 
 const IMAGE_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081';
@@ -63,6 +63,7 @@ export default function PartnerLayout() {
     { label: 'Kitchen', icon: Package, path: '/owner/dashboard?tab=kitchen' },
     { label: 'Order History', icon: History, path: '/owner/dashboard?tab=history' },
     { label: 'Finance', icon: DollarSign, path: '/owner/dashboard?tab=finance' },
+    { label: 'Reviews', icon: Star, path: '/owner/dashboard?tab=reviews' },
     { label: 'Profile', icon: User, path: '/owner/profile' },
   ] : isAdmin ? [
     { label: 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },

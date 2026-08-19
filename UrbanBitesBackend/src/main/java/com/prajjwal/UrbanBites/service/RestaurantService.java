@@ -48,6 +48,8 @@ public class RestaurantService {
     private final EmailSender emailSender;
     private final GeocodingService geocodingService;
     private final ImageStorageService imageStorageService;
+    private final com.prajjwal.UrbanBites.repository.OrderRepository orderRepository;
+    private final com.prajjwal.UrbanBites.repository.OrderItemRepository orderItemRepository;
 
     public RestaurantService(
             RestaurantRepository restaurantRepository,
@@ -57,7 +59,9 @@ public class RestaurantService {
             UserRepository userRepository,
             EmailSender emailSender,
             GeocodingService geocodingService,
-            ImageStorageService imageStorageService
+            ImageStorageService imageStorageService,
+            com.prajjwal.UrbanBites.repository.OrderRepository orderRepository,
+            com.prajjwal.UrbanBites.repository.OrderItemRepository orderItemRepository
     ) {
         this.restaurantRepository = restaurantRepository;
         this.menuItemRepository = menuItemRepository;
@@ -67,6 +71,8 @@ public class RestaurantService {
         this.emailSender = emailSender;
         this.geocodingService = geocodingService;
         this.imageStorageService = imageStorageService;
+        this.orderRepository = orderRepository;
+        this.orderItemRepository = orderItemRepository;
     }
 
     @Transactional
@@ -118,12 +124,63 @@ public class RestaurantService {
         return toResponse(updated, null);
     }
 
+    @Transactional(readOnly = true)
     public List<RestaurantResponse> listMyRestaurants(String currentEmail) {
         User owner = getUserByEmail(currentEmail);
         return restaurantRepository.findByOwnerIdOrderByIdDesc(owner.getId())
                 .stream()
                 .map(r -> toResponse(r, null))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public com.prajjwal.UrbanBites.dto.response.AnalyticsResponse getAnalytics(String currentEmail, Long restaurantId) {
+        getOwnedRestaurant(currentEmail, restaurantId);
+        java.time.LocalDateTime sevenDaysAgo = java.time.LocalDateTime.now().minusDays(7);
+        List<com.prajjwal.UrbanBites.entity.Order> orders = orderRepository.findByRestaurantIdAndCreatedAtAfterOrderByCreatedAtAsc(restaurantId, sevenDaysAgo);
+
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        int totalOrders = 0;
+        Map<String, com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.DailyRevenue> dailyRevenueMap = new HashMap<>();
+        Map<String, com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.TopMenuItem> topItemsMap = new HashMap<>();
+
+        for (com.prajjwal.UrbanBites.entity.Order order : orders) {
+            if (order.getStatus() == com.prajjwal.UrbanBites.enums.OrderStatus.DELIVERED) {
+                totalOrders++;
+                totalRevenue = totalRevenue.add(order.getGrandTotal());
+                String dateStr = order.getCreatedAt().toLocalDate().toString();
+                
+                com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.DailyRevenue currentDaily = dailyRevenueMap.getOrDefault(dateStr, new com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.DailyRevenue(dateStr, BigDecimal.ZERO, 0));
+                dailyRevenueMap.put(dateStr, new com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.DailyRevenue(
+                    dateStr, 
+                    currentDaily.revenue().add(order.getGrandTotal()), 
+                    currentDaily.orders() + 1
+                ));
+
+                List<com.prajjwal.UrbanBites.entity.OrderItem> items = orderItemRepository.findByOrderIdOrderByIdAsc(order.getId());
+                for (com.prajjwal.UrbanBites.entity.OrderItem item : items) {
+                    String itemName = item.getItemName();
+                    com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.TopMenuItem currentItem = topItemsMap.getOrDefault(itemName, new com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.TopMenuItem(itemName, 0, BigDecimal.ZERO));
+                    topItemsMap.put(itemName, new com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.TopMenuItem(
+                        itemName,
+                        currentItem.quantitySold() + item.getQuantity(),
+                        currentItem.revenue().add(item.getUnitPriceSnapshot().multiply(BigDecimal.valueOf(item.getQuantity())))
+                    ));
+                }
+            }
+        }
+
+        List<com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.DailyRevenue> dailyRevenueList = new ArrayList<>(dailyRevenueMap.values());
+        dailyRevenueList.sort(Comparator.comparing(com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.DailyRevenue::date));
+
+        List<com.prajjwal.UrbanBites.dto.response.AnalyticsResponse.TopMenuItem> topItemsList = new ArrayList<>(topItemsMap.values());
+        topItemsList.sort((a, b) -> Integer.compare(b.quantitySold(), a.quantitySold()));
+        
+        if (topItemsList.size() > 5) {
+            topItemsList = topItemsList.subList(0, 5);
+        }
+
+        return new com.prajjwal.UrbanBites.dto.response.AnalyticsResponse(totalRevenue, totalOrders, dailyRevenueList, topItemsList);
     }
 
     public List<RestaurantResponse> discoverByLocation(

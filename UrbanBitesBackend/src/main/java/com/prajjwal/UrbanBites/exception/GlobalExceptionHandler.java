@@ -7,13 +7,25 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import jakarta.persistence.OptimisticLockException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAccessDeniedException(Exception ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access Denied"));
+    }
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, String>> handleApiException(ApiException ex) {
         return ResponseEntity.status(ex.getStatus()).body(Map.of("message", ex.getMessage()));
+    }
+
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, OptimisticLockException.class})
+    public ResponseEntity<Map<String, String>> handleOptimisticLockingFailureException(Exception ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Too many concurrent requests. Please try again."));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -47,4 +59,5 @@ public class GlobalExceptionHandler {
                 .body(Map.of("message", "An unexpected error occurred: " + ex.getMessage()));
     }
 }
+
 

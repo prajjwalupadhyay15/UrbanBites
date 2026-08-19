@@ -35,7 +35,16 @@ import com.prajjwal.UrbanBites.repository.PaymentRepository;
 import com.prajjwal.UrbanBites.repository.PricingRuleRepository;
 import com.prajjwal.UrbanBites.repository.RestaurantRepository;
 import com.prajjwal.UrbanBites.repository.UserRepository;
+import com.prajjwal.UrbanBites.entity.AdminCouponCampaign;
+import com.prajjwal.UrbanBites.entity.CouponUsage;
+import com.prajjwal.UrbanBites.enums.CouponUsageStatus;
+import com.prajjwal.UrbanBites.repository.AdminCouponCampaignRepository;
+import com.prajjwal.UrbanBites.repository.CouponUsageRepository;
+import com.prajjwal.UrbanBites.repository.RestaurantReviewRepository;
+import com.prajjwal.UrbanBites.entity.Wallet;
+import com.prajjwal.UrbanBites.service.WalletService;
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.List;
@@ -70,6 +79,11 @@ public class OrderService {
     private final NotificationService notificationService;
     private final RealtimePublisher realtimePublisher;
     private final GeocodingService geocodingService;
+    private final CouponUsageRepository couponUsageRepository;
+    private final CouponService couponService;
+    private final RestaurantReviewRepository reviewRepository;
+    private final AdminCouponCampaignRepository couponCampaignRepository;
+    private final WalletService walletService;
 
     public OrderService(
             UserRepository userRepository,
@@ -90,7 +104,12 @@ public class OrderService {
             DispatchService dispatchService,
             NotificationService notificationService,
             RealtimePublisher realtimePublisher,
-            GeocodingService geocodingService
+            GeocodingService geocodingService,
+            CouponUsageRepository couponUsageRepository,
+            CouponService couponService,
+            RestaurantReviewRepository reviewRepository,
+            AdminCouponCampaignRepository couponCampaignRepository,
+            WalletService walletService
     ) {
         this.userRepository = userRepository;
         this.cartRepository = cartRepository;
@@ -111,6 +130,11 @@ public class OrderService {
         this.notificationService = notificationService;
         this.realtimePublisher = realtimePublisher;
         this.geocodingService = geocodingService;
+        this.couponUsageRepository = couponUsageRepository;
+        this.couponService = couponService;
+        this.reviewRepository = reviewRepository;
+        this.couponCampaignRepository = couponCampaignRepository;
+        this.walletService = walletService;
     }
 
     @Transactional
@@ -121,6 +145,10 @@ public class OrderService {
     @Transactional
     public OrderResponse placeOrder(String currentEmail, PlaceOrderRequest request) {
         User user = getUserByEmail(currentEmail);
+        
+        // Lock user row to prevent concurrent checkout race conditions (e.g. coupon multiple usage)
+        userRepository.findByIdForUpdate(user.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
 
         Cart cart = cartRepository.findByUserIdAndState(user.getId(), CartState.ACTIVE)
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Cart is empty"));
@@ -153,13 +181,39 @@ public class OrderService {
                 cart.getRestaurant().getLongitude()
         );
 
+        BigDecimal discount = BigDecimal.ZERO;
+        AdminCouponCampaign appliedCampaign = null;
+        if (cart.getAppliedCouponCode() != null) {
+            appliedCampaign = couponCampaignRepository.findByCodeIgnoreCase(cart.getAppliedCouponCode())
+                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Applied coupon code no longer exists"));
+
+            OffsetDateTime now = OffsetDateTime.now();
+            if (!appliedCampaign.isActive() || now.isBefore(appliedCampaign.getStartsAt()) || now.isAfter(appliedCampaign.getEndsAt())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Applied coupon code is no longer valid");
+            }
+            if (appliedCampaign.getMaxUses() != null && appliedCampaign.getCurrentUses() >= appliedCampaign.getMaxUses()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Applied coupon code usage limit reached");
+            }
+            boolean alreadyUsed = couponUsageRepository.existsByUserIdAndCampaignIdAndStatusIn(
+                    user.getId(),
+                    appliedCampaign.getId(),
+                    List.of(CouponUsageStatus.USED)
+            );
+            if (alreadyUsed) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "You have already used this coupon code");
+            }
+
+            discount = couponService.calculateDiscount(appliedCampaign, subtotal);
+        }
+
         FeeBreakupResponse fees = pricingEngineService.preview(
                 rule,
                 subtotal,
                 itemLevelPackingTotal,
                 deliveryDistanceKm,
                 false,
-                false
+                false,
+                discount
         );
 
         Order order = new Order();
@@ -188,6 +242,29 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
+        if (appliedCampaign != null) {
+            final AdminCouponCampaign campaignRef = appliedCampaign;
+            CouponUsage usage = couponUsageRepository.findByUserIdAndCampaignIdAndStatus(
+                    user.getId(),
+                    appliedCampaign.getId(),
+                    CouponUsageStatus.APPLIED
+            ).orElseGet(() -> {
+                CouponUsage u = new CouponUsage();
+                u.setUser(user);
+                u.setCampaign(campaignRef);
+                return u;
+            });
+            usage.setStatus(CouponUsageStatus.USED);
+            usage.setOrder(savedOrder);
+            usage.setDiscountAmount(fees.discount());
+            usage.setUsedAt(OffsetDateTime.now());
+            couponUsageRepository.save(usage);
+
+            // Increment usage count and rely on Optimistic Locking
+            campaignRef.setCurrentUses(campaignRef.getCurrentUses() + 1);
+            couponCampaignRepository.save(campaignRef);
+        }
+
         List<OrderItem> orderItems = cartItems.stream().map(item -> {
             OrderItem orderItem = new OrderItem();
             orderItem.setOrder(savedOrder);
@@ -204,32 +281,63 @@ public class OrderService {
         }).toList();
         orderItemRepository.saveAll(orderItems);
 
+        BigDecimal amountToPay = savedOrder.getGrandTotal();
+        BigDecimal walletDeduction = BigDecimal.ZERO;
+
+        if (request != null && Boolean.TRUE.equals(request.applyWalletBalance())) {
+            Wallet wallet = walletService.getOrCreateWallet(user.getId());
+            if (wallet.getBalance().compareTo(BigDecimal.ZERO) > 0) {
+                if (wallet.getBalance().compareTo(amountToPay) >= 0) {
+                    walletDeduction = amountToPay;
+                } else {
+                    walletDeduction = wallet.getBalance();
+                }
+            }
+        }
+
+        amountToPay = amountToPay.subtract(walletDeduction).setScale(2, RoundingMode.HALF_UP);
+
+        if (walletDeduction.compareTo(BigDecimal.ZERO) > 0) {
+            walletService.debit(
+                    user.getId(),
+                    walletDeduction,
+                    com.prajjwal.UrbanBites.enums.WalletTransactionReferenceType.ORDER_PAYMENT,
+                    savedOrder.getId(),
+                    "Wallet deduction for Order #" + savedOrder.getId()
+            );
+        }
+
         Payment payment = new Payment();
         payment.setOrder(savedOrder);
-        payment.setStatus(PaymentStatus.INITIATED);
-        payment.setAmount(savedOrder.getGrandTotal());
+        payment.setAmount(amountToPay);
         payment.setCurrency("INR");
         payment.setIdempotencyKey("init-" + UUID.randomUUID());
         payment.setRefundedAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
-        paymentRepository.save(payment);
 
-        orderStateTransitionService.assertOrderTransition(OrderStatus.CREATED, OrderStatus.PENDING_PAYMENT, TransitionActor.SYSTEM);
-        savedOrder.setStatus(OrderStatus.PENDING_PAYMENT);
-        orderRepository.save(savedOrder);
+        if (amountToPay.compareTo(BigDecimal.ZERO) == 0) {
+            payment.setStatus(PaymentStatus.CAPTURED);
+            payment.setProviderPaymentId("WALLET_" + UUID.randomUUID().toString().substring(0,8));
+            paymentRepository.save(payment);
+            
+            orderStateTransitionService.assertOrderTransition(OrderStatus.CREATED, OrderStatus.CONFIRMED, TransitionActor.SYSTEM);
+            savedOrder.setStatus(OrderStatus.CONFIRMED);
+            orderRepository.save(savedOrder);
+            
+            OrderResponse response = toOrderResponse(savedOrder, orderItems, payment);
+            publishOrderRealtime(response, "ORDER_CONFIRMED");
+            return response;
+        } else {
+            payment.setStatus(PaymentStatus.INITIATED);
+            paymentRepository.save(payment);
 
-        cartItemRepository.deleteByCartId(cart.getId());
-        cart.setState(CartState.CHECKED_OUT);
-        cartRepository.save(cart);
-        realtimePublisher.publishUserCart(
-                user.getId(),
-                cart.getId(),
-                "CART_CHECKED_OUT",
-                new CartResponse(null, null, null, 0, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP), List.of())
-        );
+            orderStateTransitionService.assertOrderTransition(OrderStatus.CREATED, OrderStatus.PENDING_PAYMENT, TransitionActor.SYSTEM);
+            savedOrder.setStatus(OrderStatus.PENDING_PAYMENT);
+            orderRepository.save(savedOrder);
 
-        OrderResponse response = toOrderResponse(savedOrder, orderItems, payment);
-        publishOrderRealtime(response, "ORDER_PENDING_PAYMENT");
-        return response;
+            OrderResponse response = toOrderResponse(savedOrder, orderItems, payment);
+            publishOrderRealtime(response, "ORDER_PENDING_PAYMENT");
+            return response;
+        }
     }
 
     private Address resolveAddressForOrder(Long userId, Long requestedAddressId) {
@@ -412,12 +520,26 @@ public class OrderService {
         orderStateTransitionService.assertPaymentTransition(payment.getStatus(), PaymentStatus.CAPTURED);
         payment.setStatus(PaymentStatus.CAPTURED);
         payment.setIdempotencyKey(normalizedKey);
+        payment.setProviderPaymentId("SIM-" + normalizedKey);
         payment.setProviderReference("SIM-" + normalizedKey);
         paymentRepository.save(payment);
 
         orderStateTransitionService.assertOrderTransition(order.getStatus(), OrderStatus.CONFIRMED, TransitionActor.SYSTEM);
         order.setStatus(OrderStatus.CONFIRMED);
         orderRepository.save(order);
+        
+        cartRepository.findByUserIdAndState(user.getId(), CartState.ACTIVE).ifPresent(cart -> {
+            cartItemRepository.deleteByCartId(cart.getId());
+            cart.setState(CartState.CHECKED_OUT);
+            cartRepository.save(cart);
+            realtimePublisher.publishUserCart(
+                    user.getId(),
+                    cart.getId(),
+                    "CART_CHECKED_OUT",
+                    new CartResponse(null, null, null, 0, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP), List.of(), null)
+            );
+        });
+        
         publishOrderNotification(
                 order,
                 NotificationType.PAYMENT_SUCCESS,
@@ -438,7 +560,6 @@ public class OrderService {
         );
         publishOwnerActionRequiredNotification(order, "order:owner:action-required:order:" + order.getId());
         dispatchService.triggerDispatchForOrder(order.getId());
-
         OrderResponse response = toOrderResponse(order, orderItemRepository.findByOrderIdOrderByIdAsc(order.getId()), payment);
         publishOrderRealtime(response, "ORDER_CONFIRMED");
         if (order.getRestaurant() != null && order.getRestaurant().getOwner() != null) {
@@ -589,6 +710,19 @@ public class OrderService {
                     orderStateTransitionService.assertOrderTransition(order.getStatus(), OrderStatus.CONFIRMED, TransitionActor.SYSTEM);
                     order.setStatus(OrderStatus.CONFIRMED);
                     orderRepository.save(order);
+
+                    cartRepository.findByUserIdAndState(order.getUser().getId(), CartState.ACTIVE).ifPresent(cart -> {
+                        cartItemRepository.deleteByCartId(cart.getId());
+                        cart.setState(CartState.CHECKED_OUT);
+                        cartRepository.save(cart);
+                        realtimePublisher.publishUserCart(
+                                order.getUser().getId(),
+                                cart.getId(),
+                                "CART_CHECKED_OUT",
+                                new CartResponse(null, null, null, 0, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP), List.of(), null)
+                        );
+                    });
+
                     publishOrderNotification(
                             order,
                             NotificationType.PAYMENT_SUCCESS,
@@ -848,6 +982,7 @@ public class OrderService {
                 false,
                 "order:accepted-by-restaurant:order:" + order.getId()
         );
+        dispatchService.triggerDispatchForOrder(order.getId());
         OrderResponse response = toOrderResponse(order);
         publishOrderRealtime(response, "ORDER_ACCEPTED_BY_RESTAURANT");
         return response;
@@ -1018,6 +1153,8 @@ public class OrderService {
                 payment.getRefundEvidenceImagePath()
         );
 
+        boolean reviewed = reviewRepository.existsByOrderIdAndUserId(order.getId(), order.getUser().getId());
+
         return new OrderResponse(
                 order.getId(),
                 order.getStatus(),
@@ -1038,7 +1175,8 @@ public class OrderService {
                 order.getEtaUpdatedAt(),
                 order.getPricingRuleVersion(),
                 paymentResponse,
-                itemResponses
+                itemResponses,
+                reviewed
         );
     }
 

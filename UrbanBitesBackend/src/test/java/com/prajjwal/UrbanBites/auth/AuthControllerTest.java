@@ -54,8 +54,8 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("Email not verified. Please verify OTP to continue."));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.loggedIn").value(false));
     }
 
     @Test
@@ -99,8 +99,8 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(newLoginRequest)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("Email not verified. Please verify OTP to continue."));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.loggedIn").value(false));
 
         mockMvc.perform(post("/api/v1/auth/password-reset/confirm")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -180,8 +180,8 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(newLoginRequest)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("Email not verified. Please verify OTP to continue."));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.loggedIn").value(false));
     }
 
     @Test

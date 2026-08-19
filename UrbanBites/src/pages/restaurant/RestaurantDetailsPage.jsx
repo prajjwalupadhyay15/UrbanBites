@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { restaurantApi } from '../../api/restaurantApi';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Search, Star, Clock, MapPin, Utensils, Wifi, WifiOff } from 'lucide-react';
+import { reviewApi } from '../../api/reviewApi';
+import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Search, Star, Clock, MapPin, Utensils, Wifi, WifiOff, MessageSquare } from 'lucide-react';
 import MenuItemCard from '../../components/specific/MenuItemCard';
 import CartFloatingBar from '../../components/specific/CartFloatingBar';
+import StarRating from '../../components/common/StarRating';
+import { format } from 'date-fns';
 
 const IMAGE_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081';
 
@@ -29,6 +32,7 @@ export default function RestaurantDetailsPage() {
   const [filterVeg, setFilterVeg] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [priceSort, setPriceSort] = useState(null);
+  const [filterRating, setFilterRating] = useState(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -49,6 +53,17 @@ export default function RestaurantDetailsPage() {
     staleTime: 1000 * 60 * 5,
   });
 
+  // Fetch reviews
+  const { data: reviews = [] } = useQuery({
+    queryKey: ['restaurant-reviews', id],
+    queryFn: () => reviewApi.getRestaurantReviews(id),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Parallax scroll setup
+  const { scrollY } = useScroll();
+  const y = useTransform(scrollY, [0, 400], [0, 150]);
+
   const restaurantId = menuItems[0]?.restaurantId ?? Number(id);
   const restaurantName = restaurantInfo?.name || (menuItems.length > 0 ? `Restaurant` : `Restaurant #${id}`);
   const restaurantAddress = restaurantInfo?.addressLine
@@ -66,6 +81,7 @@ export default function RestaurantDetailsPage() {
   let filteredItems = menuItems.filter((item) => {
     if (filterVeg === true && !item.veg) return false;
     if (filterVeg === false && item.veg) return false;
+    if (filterRating !== null && (item.averageRating || 0) < filterRating) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       if (
@@ -95,10 +111,11 @@ export default function RestaurantDetailsPage() {
         {/* Background image or gradient */}
         {restaurantImage ? (
           <>
-            <img
+            <motion.img
+              style={{ y }}
               src={restaurantImage}
               alt={restaurantName}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-[150%] -top-[25%] object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
           </>
@@ -192,6 +209,27 @@ export default function RestaurantDetailsPage() {
             ))}
           </div>
 
+          {/* Rating filter */}
+          <div className="flex bg-white border border-[#EADDCD] rounded-2xl p-1.5 gap-1 w-full sm:w-auto shadow-sm">
+            {[
+              { label: 'All Ratings', val: null },
+              { label: '4.0+ ⭐', val: 4.0 },
+              { label: '3.0+ ⭐', val: 3.0 },
+            ].map(({ label, val }) => (
+              <button
+                key={label}
+                onClick={() => setFilterRating(val)}
+                className={`flex-1 sm:flex-none px-3 py-2 rounded-xl text-sm font-bold transition-all
+                  ${filterRating === val
+                    ? 'bg-[#F7B538] text-[#2A0800] shadow-md'
+                    : 'text-[#8E7B73] hover:text-[#2A0800] hover:bg-[#FDF9F1]'
+                  }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {/* Sort */}
           <div className="flex bg-white border border-[#EADDCD] rounded-2xl p-1.5 shadow-sm">
             <select
@@ -233,32 +271,55 @@ export default function RestaurantDetailsPage() {
           </div>
         ) : (
           <div className="space-y-12">
-            {categories.map((cat) => {
-              const catItems = filteredItems.filter((i) => (i.category || 'Menu') === cat);
-              if (catItems.length === 0) return null;
-              return (
-                <section key={cat}>
-                  <div className="flex items-center gap-4 mb-6">
-                    <h2 className="text-3xl font-display font-black text-[#780116] tracking-tight">{cat}</h2>
-                    <div className="flex-1 h-0.5 bg-[#EADDCD] rounded-full" />
-                    <span className="text-sm font-black text-[#8E7B73] bg-white px-3 py-1 rounded-full border border-[#EADDCD] shadow-sm">{catItems.length} items</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {catItems.map((item, idx) => (
-                      <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-50px" }}
-                        transition={{ delay: (idx % 4) * 0.1, type: "spring", stiffness: 300, damping: 24 }}
-                      >
-                        <MenuItemCard item={item} restaurantId={restaurantId} restaurantName={restaurantName} />
-                      </motion.div>
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
+            {priceSort ? (
+              <section>
+                <div className="flex items-center gap-4 mb-6">
+                  <h2 className="text-3xl font-display font-black text-[#780116] tracking-tight">All Items</h2>
+                  <div className="flex-1 h-0.5 bg-[#EADDCD] rounded-full" />
+                  <span className="text-sm font-black text-[#8E7B73] bg-white px-3 py-1 rounded-full border border-[#EADDCD] shadow-sm">{filteredItems.length} items</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredItems.map((item, idx) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: "-50px" }}
+                      transition={{ delay: (idx % 4) * 0.1, type: "spring", stiffness: 300, damping: 24 }}
+                    >
+                      <MenuItemCard item={item} restaurantId={restaurantId} restaurantName={restaurantName} />
+                    </motion.div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              categories.map((cat) => {
+                const catItems = filteredItems.filter((i) => (i.category || 'Menu') === cat);
+                if (catItems.length === 0) return null;
+                return (
+                  <section key={cat}>
+                    <div className="flex items-center gap-4 mb-6">
+                      <h2 className="text-3xl font-display font-black text-[#780116] tracking-tight">{cat}</h2>
+                      <div className="flex-1 h-0.5 bg-[#EADDCD] rounded-full" />
+                      <span className="text-sm font-black text-[#8E7B73] bg-white px-3 py-1 rounded-full border border-[#EADDCD] shadow-sm">{catItems.length} items</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {catItems.map((item, idx) => (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true, margin: "-50px" }}
+                          transition={{ delay: (idx % 4) * 0.1, type: "spring", stiffness: 300, damping: 24 }}
+                        >
+                          <MenuItemCard item={item} restaurantId={restaurantId} restaurantName={restaurantName} />
+                        </motion.div>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })
+            )}
 
             {filteredItems.length === 0 && (
               <div className="py-24 text-center">
@@ -267,6 +328,55 @@ export default function RestaurantDetailsPage() {
                 <p className="text-[#8E7B73] font-bold text-lg">Try searching for something else or clearing filters.</p>
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Reviews Section */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-8 pt-16 pb-12">
+        <div className="flex items-center gap-4 mb-8">
+          <h2 className="text-3xl font-display font-black text-[#780116] tracking-tight">Reviews</h2>
+          <div className="flex-1 h-0.5 bg-[#EADDCD] rounded-full" />
+          <span className="text-sm font-black text-[#8E7B73] bg-white px-3 py-1 rounded-full border border-[#EADDCD] shadow-sm">{reviews.length} reviews</span>
+        </div>
+
+        {reviews.length === 0 ? (
+          <div className="bg-white rounded-[2rem] border-2 border-dashed border-[#EADDCD] p-12 text-center">
+            <div className="w-16 h-16 bg-[#FDF9F1] rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <MessageSquare size={32} className="text-[#F7B538]" />
+            </div>
+            <h3 className="text-xl font-black text-[#780116] mb-2">No reviews yet</h3>
+            <p className="text-[#8E7B73] font-bold">Be the first to review {restaurantName} after your order!</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {reviews.map((review, idx) => (
+              <motion.div
+                key={review.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ delay: (idx % 4) * 0.1, type: "spring", stiffness: 300, damping: 24 }}
+                className="bg-white rounded-[2rem] p-6 border border-[#EADDCD] shadow-sm flex flex-col"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h4 className="font-black text-[#780116] text-lg">{review.reviewerName}</h4>
+                    <p className="text-[#8E7B73] text-xs font-bold mt-0.5">
+                      {format(new Date(review.createdAt), 'MMM d, yyyy')}
+                    </p>
+                  </div>
+                  <div className="bg-[#FDF9F1] px-3 py-1.5 rounded-xl border border-[#F7B538]/30">
+                    <StarRating value={review.rating} readonly size={16} />
+                  </div>
+                </div>
+                {review.comment ? (
+                  <p className="text-[#2A0800] text-sm font-bold leading-relaxed">{review.comment}</p>
+                ) : (
+                  <p className="text-[#8E7B73] text-sm font-bold italic">No comment provided.</p>
+                )}
+              </motion.div>
+            ))}
           </div>
         )}
       </div>

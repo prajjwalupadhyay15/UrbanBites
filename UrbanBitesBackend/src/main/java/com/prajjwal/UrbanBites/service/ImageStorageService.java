@@ -24,7 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class ImageStorageService {
 
-    private static final Set<String> ALLOWED_CATEGORIES = Set.of("restaurants", "menu-items", "profiles", "refund-evidence");
+    private static final Set<String> ALLOWED_CATEGORIES = Set.of("restaurants", "menu-items", "profiles", "refund-evidence", "chatbot");
     private static final Logger log = LoggerFactory.getLogger(ImageStorageService.class);
 
     private final Path rootPath;
@@ -65,6 +65,7 @@ public class ImageStorageService {
             Files.createDirectories(this.rootPath.resolve("menu-items"));
             Files.createDirectories(this.rootPath.resolve("profiles"));
             Files.createDirectories(this.rootPath.resolve("refund-evidence"));
+            Files.createDirectories(this.rootPath.resolve("chatbot"));
         } catch (IOException ex) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to initialize image storage");
         }
@@ -84,6 +85,10 @@ public class ImageStorageService {
 
     public String saveRefundEvidenceImage(MultipartFile image) {
         return saveImage(image, "refund-evidence");
+    }
+
+    public String saveChatbotImage(MultipartFile image) {
+        return saveImage(image, "chatbot");
     }
 
     public void deleteImage(String imagePath) {
@@ -124,7 +129,12 @@ public class ImageStorageService {
         }
 
         if (cloudinaryEnabled) {
-            return uploadToCloudinary(image, category);
+            try {
+                return uploadToCloudinary(image, category);
+            } catch (Exception ex) {
+                log.warn("Cloudinary upload failed, falling back to local storage: {}", ex.getMessage());
+                // Fallback to local storage
+            }
         }
 
         return saveLocally(image, category);
@@ -163,8 +173,9 @@ public class ImageStorageService {
                 throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Cloudinary upload did not return a URL");
             }
             return secureUrl.toString();
-        } catch (IOException ex) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to upload image");
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to upload image: " + ex.getMessage());
         }
     }
 

@@ -26,6 +26,7 @@ import com.prajjwal.UrbanBites.entity.AdminReviewModeration;
 import com.prajjwal.UrbanBites.entity.DeliveryAgentProfile;
 import com.prajjwal.UrbanBites.entity.DispatchAssignment;
 import com.prajjwal.UrbanBites.entity.Order;
+import com.prajjwal.UrbanBites.entity.OrderItem;
 import com.prajjwal.UrbanBites.entity.Payment;
 import com.prajjwal.UrbanBites.entity.PricingRule;
 import com.prajjwal.UrbanBites.entity.PricingRuleAudit;
@@ -45,6 +46,7 @@ import com.prajjwal.UrbanBites.repository.AdminDisputeCaseRepository;
 import com.prajjwal.UrbanBites.repository.AdminPayoutControlRepository;
 import com.prajjwal.UrbanBites.repository.AdminReviewModerationRepository;
 import com.prajjwal.UrbanBites.repository.DispatchAssignmentRepository;
+import com.prajjwal.UrbanBites.repository.OrderItemRepository;
 import com.prajjwal.UrbanBites.repository.OrderRepository;
 import com.prajjwal.UrbanBites.repository.PaymentRepository;
 import com.prajjwal.UrbanBites.repository.PricingRuleAuditRepository;
@@ -58,6 +60,7 @@ import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -69,6 +72,7 @@ public class AdminService {
     private final UserRepository userRepository;
     private final RestaurantRepository restaurantRepository;
     private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository;
     private final PaymentRepository paymentRepository;
     private final PricingRuleRepository pricingRuleRepository;
     private final PricingRuleAuditRepository pricingRuleAuditRepository;
@@ -82,11 +86,15 @@ public class AdminService {
     private final NotificationService notificationService;
     private final RealtimePublisher realtimePublisher;
     private final SimpMessagingTemplate messagingTemplate;
+    private final PaymentGatewayClient paymentGatewayClient;
+    private final EmailSender emailSender;
+    private final WalletService walletService;
 
     public AdminService(
             UserRepository userRepository,
             RestaurantRepository restaurantRepository,
             OrderRepository orderRepository,
+            OrderItemRepository orderItemRepository,
             PaymentRepository paymentRepository,
             PricingRuleRepository pricingRuleRepository,
             PricingRuleAuditRepository pricingRuleAuditRepository,
@@ -99,11 +107,15 @@ public class AdminService {
             AdminActionAuditRepository adminActionAuditRepository,
             NotificationService notificationService,
             RealtimePublisher realtimePublisher,
-            SimpMessagingTemplate messagingTemplate
+            SimpMessagingTemplate messagingTemplate,
+            PaymentGatewayClient paymentGatewayClient,
+            EmailSender emailSender,
+            WalletService walletService
     ) {
         this.userRepository = userRepository;
         this.restaurantRepository = restaurantRepository;
         this.orderRepository = orderRepository;
+        this.orderItemRepository = orderItemRepository;
         this.paymentRepository = paymentRepository;
         this.pricingRuleRepository = pricingRuleRepository;
         this.pricingRuleAuditRepository = pricingRuleAuditRepository;
@@ -117,6 +129,9 @@ public class AdminService {
         this.notificationService = notificationService;
         this.realtimePublisher = realtimePublisher;
         this.messagingTemplate = messagingTemplate;
+        this.paymentGatewayClient = paymentGatewayClient;
+        this.emailSender = emailSender;
+        this.walletService = walletService;
     }
 
     @Transactional(readOnly = true)
@@ -505,6 +520,113 @@ public class AdminService {
         } else {
             dispute.setResolvedAt(null);
         }
+        
+        if (AdminDisputeStatus.RESOLVED.equals(request.status()) && !AdminDisputeStatus.RESOLVED.equals(before)) {
+            if (dispute.getOrder() != null) {
+                Order order = dispute.getOrder();
+                paymentRepository.findByOrderId(order.getId()).ifPresent(payment -> {
+                    if (PaymentStatus.CAPTURED.equals(payment.getStatus())) {
+                        if (payment.getProviderPaymentId() != null && !payment.getProviderPaymentId().isBlank()) {
+                            BigDecimal alreadyRefunded = payment.getRefundedAmount() == null
+                                    ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                                    : payment.getRefundedAmount().setScale(2, RoundingMode.HALF_UP);
+                            BigDecimal refundable = payment.getAmount().setScale(2, RoundingMode.HALF_UP).subtract(alreadyRefunded);
+                            if (refundable.compareTo(BigDecimal.ZERO) > 0) {
+                                try {
+                                    if ("WALLET".equals(request.refundTarget())) {
+                                        walletService.credit(
+                                                dispute.getCreatedByUser().getId(),
+                                                refundable,
+                                                com.prajjwal.UrbanBites.enums.WalletTransactionReferenceType.ORDER_REFUND,
+                                                order.getId(),
+                                                "Dispute refund for Order #" + order.getId()
+                                        );
+                                    } else {
+                                        paymentGatewayClient.createRefund(
+                                                payment.getProviderPaymentId(),
+                                                refundable,
+                                                "dispute-refund-" + dispute.getId(),
+                                                "Dispute resolved"
+                                        );
+                                    }
+                                    
+                                    payment.setRefundedAmount(payment.getAmount().setScale(2, RoundingMode.HALF_UP));
+                                    payment.setStatus(PaymentStatus.REFUNDED_FULL);
+                                    paymentRepository.save(payment);
+                                    
+                                    order.setStatus(OrderStatus.CANCELLED);
+                                    orderRepository.save(order);
+                                } catch (Exception ex) {
+                                    System.err.println("Failed to refund dispute: " + ex.getMessage());
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                if (dispute.getCreatedByUser() != null) {
+                    User disputeUser = dispute.getCreatedByUser();
+                    String refundMsg = "WALLET".equals(request.refundTarget())
+                            ? "We have issued a full refund to your UrbanBites Wallet."
+                            : "We have issued a full refund to your original payment method.";
+                    try {
+                        emailSender.sendRefundConfirmation(
+                                disputeUser.getEmail(),
+                                disputeUser.getFullName(),
+                                "Dispute Resolved & Refund Issued",
+                                "Your dispute for Order #" + order.getId() + " has been resolved. " + refundMsg,
+                                "Order #" + order.getId()
+                        );
+                        
+                        messagingTemplate.convertAndSendToUser(
+                                disputeUser.getEmail(),
+                                "/queue/chat",
+                                Map.of(
+                                        "text", "Your dispute for Order #" + order.getId() + " has been reviewed and resolved. " + refundMsg,
+                                        "senderName", "Admin Support"
+                                )
+                        );
+                        
+                        // Send CSAT Request if resolved
+                        messagingTemplate.convertAndSendToUser(
+                                disputeUser.getEmail(),
+                                "/queue/chat",
+                                Map.of(
+                                        "type", "CSAT_REQUEST"
+                                )
+                        );
+                    } catch (Exception ex) {
+                        System.err.println("Failed to send dispute email/notification: " + ex.getMessage());
+                    }
+                }
+            }
+        } else if (AdminDisputeStatus.REJECTED.equals(request.status()) && !AdminDisputeStatus.REJECTED.equals(before)) {
+            if (dispute.getOrder() != null && dispute.getCreatedByUser() != null) {
+                Order order = dispute.getOrder();
+                User disputeUser = dispute.getCreatedByUser();
+                try {
+                    emailSender.sendTransactionalUpdate(
+                            disputeUser.getEmail(),
+                            disputeUser.getFullName(),
+                            "Dispute Update",
+                            "Your dispute for Order #" + order.getId() + " has been reviewed and cancelled. " + (note != null ? note : ""),
+                            "Order #" + order.getId()
+                    );
+                    
+                    messagingTemplate.convertAndSendToUser(
+                            disputeUser.getEmail(),
+                            "/queue/chat",
+                            Map.of(
+                                    "text", "Your dispute for Order #" + order.getId() + " has been reviewed and cancelled. " + (note != null ? note : ""),
+                                    "senderName", "Admin Support"
+                            )
+                    );
+                } catch (Exception ex) {
+                    System.err.println("Failed to send dispute rejection email/notification: " + ex.getMessage());
+                }
+            }
+        }
+        
         AdminDisputeCase saved = adminDisputeCaseRepository.save(dispute);
 
         audit(
@@ -761,6 +883,28 @@ public class AdminService {
     }
 
     private AdminDisputeCaseResponse toDisputeResponse(AdminDisputeCase dispute) {
+        String restaurantName = "Unknown";
+        String orderTotal = "₹0.00";
+        String orderItemsSummary = "";
+        
+        if (dispute.getOrder() != null) {
+            try {
+                restaurantName = dispute.getOrder().getRestaurant().getName();
+                orderTotal = "₹" + dispute.getOrder().getGrandTotal().setScale(2, RoundingMode.HALF_UP).toString();
+                
+                List<OrderItem> items = orderItemRepository.findByOrderIdOrderByIdAsc(dispute.getOrder().getId());
+                if (items != null && !items.isEmpty()) {
+                    StringBuilder itemsSb = new StringBuilder();
+                    for (int i = 0; i < items.size(); i++) {
+                        OrderItem item = items.get(i);
+                        itemsSb.append(item.getQuantity()).append("x ").append(item.getItemName());
+                        if (i < items.size() - 1) itemsSb.append(", ");
+                    }
+                    orderItemsSummary = itemsSb.toString();
+                }
+            } catch (Exception ignored) {}
+        }
+        
         return new AdminDisputeCaseResponse(
                 dispute.getId(),
                 dispute.getOrder().getId(),
@@ -771,7 +915,12 @@ public class AdminService {
                 dispute.getResolutionNote(),
                 dispute.getCreatedByUser().getEmail(),
                 dispute.getCreatedAt(),
-                dispute.getResolvedAt()
+                dispute.getResolvedAt(),
+                dispute.getImageUrl(),
+                restaurantName,
+                orderItemsSummary,
+                orderTotal,
+                dispute.getCreatedByUser().getFullName()
         );
     }
 

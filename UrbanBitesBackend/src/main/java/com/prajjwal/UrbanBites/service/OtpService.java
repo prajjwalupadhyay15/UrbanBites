@@ -18,7 +18,7 @@ public class OtpService {
     private static final int OTP_TTL_MINUTES = 5;
     private static final int OTP_MAX_ATTEMPTS = 5;
     private static final int OTP_LOCK_MINUTES = 10;
-    private static final int OTP_RESEND_COOLDOWN_SECONDS = 30;
+    private static final int OTP_RESEND_COOLDOWN_SECONDS = 0;
     private static final DateTimeFormatter EXPIRY_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a");
 
     private final OtpVerificationRepository otpVerificationRepository;

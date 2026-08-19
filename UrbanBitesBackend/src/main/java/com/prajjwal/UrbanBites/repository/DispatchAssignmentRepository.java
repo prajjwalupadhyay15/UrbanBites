@@ -35,6 +35,8 @@ public interface DispatchAssignmentRepository extends JpaRepository<DispatchAssi
 
     long countByAgentUserIdAndStatus(Long agentUserId, DispatchAssignmentStatus status);
 
+    long countByAgentUserIdAndStatusAndCreatedAtAfter(Long agentUserId, DispatchAssignmentStatus status, OffsetDateTime timestamp);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<DispatchAssignment> findTopByOrderIdOrderByCreatedAtDescIdDesc(Long orderId);
 

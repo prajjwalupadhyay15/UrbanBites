@@ -15,18 +15,21 @@ import com.prajjwal.UrbanBites.entity.DispatchAssignment;
 import com.prajjwal.UrbanBites.entity.DispatchEvent;
 import com.prajjwal.UrbanBites.entity.Order;
 import com.prajjwal.UrbanBites.entity.OrderItem;
+import com.prajjwal.UrbanBites.entity.PricingRule;
 import com.prajjwal.UrbanBites.entity.User;
 import com.prajjwal.UrbanBites.enums.ApprovalStatus;
 import com.prajjwal.UrbanBites.enums.DispatchAssignmentStatus;
 import com.prajjwal.UrbanBites.enums.NotificationType;
 import com.prajjwal.UrbanBites.enums.OrderStatus;
 import com.prajjwal.UrbanBites.enums.Role;
+import com.prajjwal.UrbanBites.enums.WalletTransactionReferenceType;
 import com.prajjwal.UrbanBites.exception.ApiException;
 import com.prajjwal.UrbanBites.repository.DeliveryAgentProfileRepository;
 import com.prajjwal.UrbanBites.repository.DispatchAssignmentRepository;
 import com.prajjwal.UrbanBites.repository.DispatchEventRepository;
 import com.prajjwal.UrbanBites.repository.OrderItemRepository;
 import com.prajjwal.UrbanBites.repository.OrderRepository;
+import com.prajjwal.UrbanBites.repository.PricingRuleRepository;
 import com.prajjwal.UrbanBites.repository.UserRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -69,6 +72,8 @@ public class DispatchService {
     private final DispatchProperties dispatchProperties;
     private final NotificationService notificationService;
     private final RealtimePublisher realtimePublisher;
+    private final PricingRuleRepository pricingRuleRepository;
+    private final WalletService walletService;
 
     public DispatchService(
             UserRepository userRepository,
@@ -79,7 +84,9 @@ public class DispatchService {
             OrderItemRepository orderItemRepository,
             DispatchProperties dispatchProperties,
             NotificationService notificationService,
-            RealtimePublisher realtimePublisher
+            RealtimePublisher realtimePublisher,
+            PricingRuleRepository pricingRuleRepository,
+            WalletService walletService
     ) {
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
@@ -90,6 +97,8 @@ public class DispatchService {
         this.dispatchProperties = dispatchProperties;
         this.notificationService = notificationService;
         this.realtimePublisher = realtimePublisher;
+        this.pricingRuleRepository = pricingRuleRepository;
+        this.walletService = walletService;
     }
 
     @Transactional
@@ -324,6 +333,7 @@ public class DispatchService {
         if (online && !profile.isVerified()) {
             if (ApprovalStatus.APPROVED.equals(agent.getApprovalStatus())) {
                 profile.setVerified(true);
+                profile.setApprovalStatus(ApprovalStatus.APPROVED);
                 profile.setApprovalRejectionReason(null);
                 log.info("Auto-corrected verified flag for agent userId={}", agent.getId());
             } else {
@@ -346,24 +356,24 @@ public class DispatchService {
     }
 
     @Transactional(readOnly = true)
-    public DispatchAssignmentResponse getMyCurrentAssignment(String currentEmail) {
+    public List<DispatchAssignmentResponse> getMyCurrentAssignments(String currentEmail) {
         User agent = getDeliveryAgentByEmail(currentEmail);
-        DispatchAssignment assignment = dispatchAssignmentRepository
-                .findTopByAgentUserIdAndStatusInOrderByCreatedAtDesc(agent.getId(), ACTIVE_AGENT_STATUSES)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "No active assignment"));
-
-        return toResponse(assignment);
+        List<DispatchAssignment> assignments = dispatchAssignmentRepository
+                .findByAgentUserIdAndStatusInOrderByCreatedAtDesc(agent.getId(), ACTIVE_AGENT_STATUSES);
+        
+        return assignments.stream().map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
-    public DeliveryOrderDetailsResponse getMyCurrentAssignmentDetails(String currentEmail) {
+    public List<DeliveryOrderDetailsResponse> getMyCurrentAssignmentDetails(String currentEmail) {
         User agent = getDeliveryAgentByEmail(currentEmail);
-        DispatchAssignment assignment = dispatchAssignmentRepository
-                .findTopByAgentUserIdAndStatusInOrderByCreatedAtDesc(agent.getId(), DETAILS_VISIBLE_STATUSES)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "No accepted active assignment"));
+        List<DispatchAssignment> assignments = dispatchAssignmentRepository
+                .findByAgentUserIdAndStatusInOrderByCreatedAtDesc(agent.getId(), DETAILS_VISIBLE_STATUSES);
 
-        List<OrderItem> items = orderItemRepository.findByOrderIdOrderByIdAsc(assignment.getOrder().getId());
-        return toDeliveryOrderDetailsResponse(assignment, items);
+        return assignments.stream().map(assignment -> {
+            List<OrderItem> items = orderItemRepository.findByOrderIdOrderByIdAsc(assignment.getOrder().getId());
+            return toDeliveryOrderDetailsResponse(assignment, items);
+        }).toList();
     }
 
     @Transactional(readOnly = true)
@@ -422,6 +432,20 @@ public class DispatchService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public java.util.Map<String, Object> getMilestoneProgress(String currentEmail) {
+        User agent = getDeliveryAgentByEmail(currentEmail);
+        OffsetDateTime startOfDay = OffsetDateTime.now().with(java.time.LocalTime.MIN);
+        long deliveriesToday = dispatchAssignmentRepository.countByAgentUserIdAndStatusAndCreatedAtAfter(
+                agent.getId(), DispatchAssignmentStatus.DELIVERED, startOfDay);
+        
+        java.util.Map<String, Object> progress = new java.util.HashMap<>();
+        progress.put("current", deliveriesToday);
+        progress.put("target", 5);
+        progress.put("bonusAmount", 100);
+        return progress;
+    }
+
     @Transactional
     public DispatchAssignmentResponse acceptOffer(String currentEmail, Long orderId) {
         User agent = getDeliveryAgentByEmail(currentEmail);
@@ -462,8 +486,8 @@ public class DispatchService {
         createEvent(saved, DispatchAssignmentStatus.ACCEPTED, "Offer accepted by agent");
 
         deliveryAgentProfileRepository.findByUserId(agent.getId()).ifPresent(profile -> {
-            profile.setAvailable(false);
             profile.setCurrentLoad(profile.getCurrentLoad() + 1);
+            profile.setAvailable(profile.getCurrentLoad() < 2);
             profile.setLastAssignedAt(OffsetDateTime.now());
             deliveryAgentProfileRepository.save(profile);
         });
@@ -553,8 +577,39 @@ public class DispatchService {
 
         assignment.setStatus(DispatchAssignmentStatus.DELIVERED);
         assignment.setDecisionAt(OffsetDateTime.now());
+        
+        // GAMIFICATION: 5th Delivery Milestone
+        OffsetDateTime startOfDay = OffsetDateTime.now().with(java.time.LocalTime.MIN);
+        long deliveriesToday = dispatchAssignmentRepository.countByAgentUserIdAndStatusAndCreatedAtAfter(
+                agent.getId(), DispatchAssignmentStatus.DELIVERED, startOfDay);
+        if (deliveriesToday == 4) { // This is the 5th delivery!
+            assignment.setAgentPayoutAmount(assignment.getAgentPayoutAmount().add(new BigDecimal("100.00")));
+        }
+
         DispatchAssignment saved = dispatchAssignmentRepository.save(assignment);
         createEvent(saved, DispatchAssignmentStatus.DELIVERED, "Order delivered by agent");
+        
+        // Credit the agent's wallet for their payout (Base fee + Surge + Potential Bonus)
+        walletService.credit(
+                agent.getId(), 
+                saved.getAgentPayoutAmount(), 
+                WalletTransactionReferenceType.DELIVERY_EARNINGS, 
+                saved.getId(), 
+                "Delivery Earnings" + (deliveriesToday == 4 ? " + Daily Goal Bonus" : "")
+        );
+        
+        if (deliveriesToday == 4) {
+            notificationService.publish(
+                    agent, 
+                    com.prajjwal.UrbanBites.enums.NotificationType.PAYMENT_SUCCESS, 
+                    "🎉 Milestone Reached!", 
+                    "You completed 5 deliveries today! A ₹100 bonus has been added to this order payout.", 
+                    "DISPATCH_ASSIGNMENT", 
+                    saved.getId().toString(), 
+                    true
+            );
+        }
+
         makeAgentAvailable(agent, true);
         return toResponse(saved);
     }
@@ -670,6 +725,13 @@ public class DispatchService {
         List<DeliveryAgentProfile> ranked = candidates.stream()
                 .filter(profile -> profile.getUser() != null)
                 .filter(profile -> !triedAgentIds.contains(profile.getUser().getId()))
+                .filter(profile -> {
+                    if (profile.getCurrentLoad() == 0) return true;
+                    List<DispatchAssignment> currentAssignments = dispatchAssignmentRepository
+                            .findByAgentUserIdAndStatusInOrderByCreatedAtDesc(profile.getUser().getId(), ACTIVE_AGENT_STATUSES);
+                    if (currentAssignments.isEmpty()) return true;
+                    return currentAssignments.get(0).getOrder().getRestaurant().getId().equals(order.getRestaurant().getId());
+                })
                 .sorted(
                         Comparator
                                 // Priority 1: Fresh location ping first
@@ -743,7 +805,7 @@ public class DispatchService {
             notificationService.publish(
                     order.getUser(),
                     NotificationType.DELIVERY_NO_AGENT_AVAILABLE,
-                    "dispatch:no-agent:order:" + order.getId() + ":attempt:" + attempt,
+                    "dispatch:no-agent:order:" + order.getId(),
                     "Delivery partner assignment delayed",
                     "We are still searching for a delivery partner for order #" + order.getId() + ".",
                     "Order #" + order.getId(),
@@ -774,20 +836,25 @@ public class DispatchService {
         );
         realtimePublisher.publishDispatchUpdate(assignment.getOrder().getId(), "DISPATCH_" + saved.getStatus().name(), response);
         if (assignment.getAgentUser() != null) {
-            realtimePublisher.publishAgentOffer(assignment.getAgentUser().getId(), "AGENT_" + saved.getStatus().name(), response);
+            realtimePublisher.publishAgentOffer(assignment.getAgentUser().getId(), "AGENT_" + saved.getStatus().name(), toResponse(assignment));
         }
     }
 
     private DispatchAssignmentResponse toResponse(DispatchAssignment assignment) {
         User agent = assignment.getAgentUser();
+        Order order = assignment.getOrder();
         return new DispatchAssignmentResponse(
                 assignment.getId(),
-                assignment.getOrder().getId(),
+                order.getId(),
                 agent == null ? null : agent.getId(),
                 agent == null ? null : agent.getFullName(),
                 assignment.getStatus(),
                 assignment.getAttemptNumber(),
-                assignment.getOfferExpiresAt()
+                assignment.getOfferExpiresAt(),
+                order.getRestaurant() != null ? order.getRestaurant().getName() : "Unknown Restaurant",
+                buildRestaurantAddress(order),
+                buildDeliveryAddress(order),
+                assignment.getAgentPayoutAmount()
         );
     }
 
@@ -821,7 +888,7 @@ public class DispatchService {
                 order.getDeliveryLongitude(),
                 order.getTotalItems(),
                 safeMoney(order.getGrandTotal()),
-                safeMoney(order.getDeliveryFee()),
+                safeMoney(assignment.getAgentPayoutAmount()),
                 items
         );
     }
@@ -838,7 +905,7 @@ public class DispatchService {
                 order.getDeliveryContactName(),
                 order.getTotalItems(),
                 safeMoney(order.getGrandTotal()),
-                safeMoney(order.getDeliveryFee())
+                safeMoney(assignment.getAgentPayoutAmount())
         );
     }
 
@@ -862,13 +929,29 @@ public class DispatchService {
     }
 
     private BigDecimal computeAgentPayout(Order order) {
-        if (order == null) {
+        if (order == null || order.getDeliveryDistanceKm() == null || order.getPricingRuleVersion() == null) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
-        BigDecimal payout = safeMoney(order.getDeliveryFee());
-        return payout.compareTo(BigDecimal.ZERO) < 0
-                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
-                : payout;
+        
+        return pricingRuleRepository.findByVersion(order.getPricingRuleVersion())
+                .map(rule -> {
+                    BigDecimal distanceKm = order.getDeliveryDistanceKm();
+                    BigDecimal distanceAboveSlab = distanceKm.subtract(rule.getSlabKmCutoff()).max(BigDecimal.ZERO);
+                    
+                    BigDecimal deliveryRaw = rule.getBaseFee()
+                            .add(rule.getSlabFee())
+                            .add(rule.getPerKmRate().multiply(distanceAboveSlab));
+                    
+                    if (deliveryRaw.compareTo(rule.getMinDeliveryFee()) < 0) {
+                        deliveryRaw = rule.getMinDeliveryFee();
+                    }
+                    if (deliveryRaw.compareTo(rule.getMaxDeliveryFee()) > 0) {
+                        deliveryRaw = rule.getMaxDeliveryFee();
+                    }
+                    
+                    return safeMoney(deliveryRaw);
+                })
+                .orElseGet(() -> safeMoney(order.getDeliveryFee()));
     }
 
     private String buildRestaurantAddress(Order order) {
@@ -920,12 +1003,34 @@ public class DispatchService {
 
     private void makeAgentAvailable(User agent, boolean deliveryCompleted) {
         deliveryAgentProfileRepository.findByUserId(agent.getId()).ifPresent(profile -> {
-            profile.setAvailable(profile.isOnline());
             if (deliveryCompleted) {
                 profile.setCurrentLoad(Math.max(0, profile.getCurrentLoad() - 1));
             }
+            profile.setAvailable(profile.isOnline() && profile.getCurrentLoad() < 2);
             deliveryAgentProfileRepository.save(profile);
         });
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.prajjwal.UrbanBites.dto.response.HeatmapZoneResponse> getHeatmapZones() {
+        List<Order> activeOrders = orderRepository.findByStatusIn(List.of(
+                OrderStatus.CREATED, OrderStatus.CONFIRMED, OrderStatus.ACCEPTED_BY_RESTAURANT,
+                OrderStatus.PREPARING, OrderStatus.READY_FOR_PICKUP
+        ));
+
+        java.util.Map<String, com.prajjwal.UrbanBites.dto.response.HeatmapZoneResponse> heatmap = new java.util.HashMap<>();
+        for (Order order : activeOrders) {
+            if (order.getRestaurant() != null && order.getRestaurant().getLatitude() != null && order.getRestaurant().getLongitude() != null) {
+                String key = order.getRestaurant().getLatitude() + "," + order.getRestaurant().getLongitude();
+                com.prajjwal.UrbanBites.dto.response.HeatmapZoneResponse existing = heatmap.get(key);
+                if (existing != null) {
+                    heatmap.put(key, new com.prajjwal.UrbanBites.dto.response.HeatmapZoneResponse(existing.latitude(), existing.longitude(), existing.weight() + 1));
+                } else {
+                    heatmap.put(key, new com.prajjwal.UrbanBites.dto.response.HeatmapZoneResponse(order.getRestaurant().getLatitude(), order.getRestaurant().getLongitude(), 1));
+                }
+            }
+        }
+        return new java.util.ArrayList<>(heatmap.values());
     }
 }
 

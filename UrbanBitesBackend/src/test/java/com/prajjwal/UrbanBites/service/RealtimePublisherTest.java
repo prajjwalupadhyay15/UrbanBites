@@ -35,7 +35,7 @@ class RealtimePublisherTest {
 
     @Test
     void publishUserCart_sendsToUserCartTopic() {
-        CartResponse snapshot = new CartResponse(20L, 2L, "Store", 1, BigDecimal.TEN, List.of());
+        CartResponse snapshot = new CartResponse(20L, 2L, "Store", 1, BigDecimal.TEN, List.of(), null);
 
         realtimePublisher.publishUserCart(5L, 20L, "cart_updated", snapshot);
 
@@ -64,7 +64,8 @@ class RealtimePublisherTest {
                 OffsetDateTime.now(),
                 "v1",
                 null,
-                List.of()
+                List.of(),
+                false
         );
 
         realtimePublisher.publishOrderUpdate(99L, "order_confirmed", snapshot);

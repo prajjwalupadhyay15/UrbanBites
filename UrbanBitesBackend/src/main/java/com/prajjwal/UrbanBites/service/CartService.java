@@ -25,6 +25,7 @@ import com.prajjwal.UrbanBites.repository.UserRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ public class CartService {
     private final PricingEngineService pricingEngineService;
     private final RealtimePublisher realtimePublisher;
     private final GeocodingService geocodingService;
+    private final CouponService couponService;
 
     public CartService(
             UserRepository userRepository,
@@ -52,7 +54,8 @@ public class CartService {
             PricingRuleRepository pricingRuleRepository,
             PricingEngineService pricingEngineService,
             RealtimePublisher realtimePublisher,
-            GeocodingService geocodingService
+            GeocodingService geocodingService,
+            CouponService couponService
     ) {
         this.userRepository = userRepository;
         this.cartRepository = cartRepository;
@@ -63,6 +66,7 @@ public class CartService {
         this.pricingEngineService = pricingEngineService;
         this.realtimePublisher = realtimePublisher;
         this.geocodingService = geocodingService;
+        this.couponService = couponService;
     }
 
     @Transactional(readOnly = true)
@@ -70,7 +74,7 @@ public class CartService {
         User user = getUserByEmail(currentEmail);
         return cartRepository.findByUserIdAndState(user.getId(), CartState.ACTIVE)
                 .map(this::toCartResponse)
-                .orElseGet(() -> new CartResponse(null, null, null, 0, BigDecimal.ZERO, List.of()));
+                .orElseGet(() -> new CartResponse(null, null, null, 0, BigDecimal.ZERO, List.of(), null));
     }
 
     @Transactional
@@ -87,7 +91,7 @@ public class CartService {
         lockUserRow(user.getId());
         Cart cart = cartRepository.findByUserIdAndState(user.getId(), CartState.ACTIVE).orElse(null);
         if (cart != null && !cart.getRestaurant().getId().equals(restaurant.getId())) {
-            throw new ApiException(HttpStatus.CONFLICT, "Cart already contains items from another restaurant");
+            throw new ApiException(HttpStatus.CONFLICT, "CART_CONFLICT:Cart already contains items from another restaurant");
         }
 
         if (cart == null) {
@@ -158,6 +162,7 @@ public class CartService {
     @Transactional
     public void clearCart(String currentEmail) {
         User user = getUserByEmail(currentEmail);
+        couponService.releaseAppliedCouponForUser(user.getId());
         cartRepository.findByUserIdAndState(user.getId(), CartState.ACTIVE)
                 .ifPresent(cart -> {
                     cartItemRepository.deleteByCartId(cart.getId());
@@ -184,9 +189,11 @@ public class CartService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Cart is empty");
         }
 
-        Address selectedAddress = resolveAddressForCheckout(user.getId(), request == null ? null : request.addressId());
+        Optional<Address> selectedAddressOpt = resolveAddressForCheckout(user.getId(), request == null ? null : request.addressId());
 
-        GeocodingService.Coordinates checkoutCoordinates = ensureCoordinates(selectedAddress);
+        GeocodingService.Coordinates checkoutCoordinates = selectedAddressOpt
+                .map(this::ensureCoordinates)
+                .orElse(null);
 
         PricingRule rule = pricingRuleRepository.findTopByActiveTrueOrderByVersionDesc()
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "No active pricing rule"));
@@ -199,12 +206,22 @@ public class CartService {
                 .map(item -> item.getItemPackingFeeSnapshot().multiply(BigDecimal.valueOf(item.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal distanceKm = haversineKm(
-                checkoutCoordinates.latitude(),
-                checkoutCoordinates.longitude(),
-                cart.getRestaurant().getLatitude(),
-                cart.getRestaurant().getLongitude()
-        );
+        BigDecimal distanceKm = BigDecimal.ZERO;
+        if (checkoutCoordinates != null) {
+            distanceKm = haversineKm(
+                    checkoutCoordinates.latitude(),
+                    checkoutCoordinates.longitude(),
+                    cart.getRestaurant().getLatitude(),
+                    cart.getRestaurant().getLongitude()
+            );
+        }
+
+        BigDecimal discount = BigDecimal.ZERO;
+        if (cart.getAppliedCouponCode() != null) {
+            discount = couponService.getAppliedCoupon(cart)
+                    .map(campaign -> couponService.calculateDiscount(campaign, subtotal))
+                    .orElse(BigDecimal.ZERO);
+        }
 
         FeeBreakupResponse fees = pricingEngineService.preview(
                 rule,
@@ -212,19 +229,35 @@ public class CartService {
                 itemLevelPackingTotal,
                 distanceKm,
                 false,
-                false
+                false,
+                discount
         );
+
+        if (checkoutCoordinates == null) {
+            // Override delivery fee to null or 0 if address is missing so UI shows it's not final
+            fees = new FeeBreakupResponse(
+                    fees.pricingRuleVersion(),
+                    fees.distanceKm(),
+                    fees.surgeMultiplier(),
+                    fees.subtotal(),
+                    null, // null delivery fee implies address needed
+                    fees.packingCharge(),
+                    fees.platformFee(),
+                    fees.tax(),
+                    fees.discount(),
+                    fees.grandTotal().subtract(fees.deliveryFee()) // remove delivery fee from grand total
+            );
+            return new CheckoutPreviewResponse(toCartResponse(cart), fees, false, "Please select a delivery address");
+        }
 
         return new CheckoutPreviewResponse(toCartResponse(cart), fees, true, "Serviceable");
     }
 
-    private Address resolveAddressForCheckout(Long userId, Long requestedAddressId) {
+    private Optional<Address> resolveAddressForCheckout(Long userId, Long requestedAddressId) {
         if (requestedAddressId != null) {
-            return addressRepository.findByIdAndUserId(requestedAddressId, userId)
-                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Selected address not found"));
+            return addressRepository.findByIdAndUserId(requestedAddressId, userId);
         }
-        return addressRepository.findTopByUserIdAndIsDefaultTrue(userId)
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Default address not found"));
+        return addressRepository.findTopByUserIdAndIsDefaultTrue(userId);
     }
 
     private GeocodingService.Coordinates ensureCoordinates(Address address) {
@@ -271,7 +304,8 @@ public class CartService {
                 cart.getRestaurant().getName(),
                 totalItems,
                 subtotal,
-                items
+                items,
+                cart.getAppliedCouponCode()
         );
     }
 
@@ -304,5 +338,6 @@ public class CartService {
         return BigDecimal.valueOf(distance).setScale(2, RoundingMode.HALF_UP);
     }
 }
+
 
 

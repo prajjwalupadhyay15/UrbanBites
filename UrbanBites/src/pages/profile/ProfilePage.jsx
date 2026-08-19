@@ -1,14 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userApi, addressApi } from '../../api/userApi';
+import { walletApi } from '../../api/walletApi';
 import { authApi } from '../../api/authApi';
 import { useAuthStore } from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { reviewApi } from '../../api/reviewApi';
 import {
   User, MapPin, Settings, Plus, Star, Trash2, Edit2, Camera,
   CheckCircle2, AlertCircle, Home, Briefcase, MoreHorizontal,
-  Shield, LogOut, ChevronRight, Phone, Mail, Clock, Bell, X, ShieldCheck
+  Shield, LogOut, ChevronRight, Phone, Mail, Clock, Bell, X, ShieldCheck,
+  MessageSquare, HelpCircle, Wallet, ArrowDownRight, ArrowUpRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AddressFormModal from '../../components/common/AddressFormModal';
@@ -17,7 +20,10 @@ const IMAGE_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081';
 
 const TABS = [
   { id: 'profile', label: 'Personal Info', icon: User },
+  { id: 'wallet', label: 'UrbanBites Wallet', icon: Wallet },
   { id: 'addresses', label: 'Saved Addresses', icon: MapPin },
+  { id: 'reviews', label: 'My Reviews', icon: Star },
+  { id: 'support', label: 'Help & Support', icon: HelpCircle },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -158,7 +164,10 @@ export default function ProfilePage() {
                 className="bg-white border border-[#EADDCD] rounded-[2.5rem] shadow-sm overflow-hidden"
               >
                 {activeTab === 'profile' && <ProfileTab profile={profile} isLoading={profileLoading} />}
+                {activeTab === 'wallet' && <WalletTab />}
                 {activeTab === 'addresses' && <AddressesTab />}
+                {activeTab === 'reviews' && <ReviewsTab />}
+                {activeTab === 'support' && <SupportTab />}
                 {activeTab === 'settings' && <SettingsTab profile={profile} />}
               </motion.div>
             </AnimatePresence>
@@ -560,6 +569,183 @@ function EmailVerificationModal({ isOpen, onClose, email }) {
           </form>
         )}
       </motion.div>
+    </div>
+  );
+}
+
+function ReviewsTab() {
+  const { data: reviews = [], isLoading } = useQuery({
+    queryKey: ['my-reviews'],
+    queryFn: reviewApi.getMyReviews,
+  });
+
+  if (isLoading) return <div className="p-8 text-center text-[#8E7B73] font-bold">Loading reviews...</div>;
+
+  return (
+    <div className="p-6 sm:p-10">
+      <div className="mb-8 pb-6 border-b border-[#EADDCD]">
+        <h2 className="text-2xl font-display font-black text-[#780116]">My Reviews</h2>
+        <p className="text-[#8E7B73] font-bold text-sm">Feedback you've left for restaurants.</p>
+      </div>
+
+      <div className="space-y-4">
+        {reviews.length === 0 ? (
+          <div className="py-12 text-center bg-[#FFFCF5] rounded-2xl border-2 border-dashed border-[#EADDCD]">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm border border-[#EADDCD]">
+              <Star size={24} className="text-[#8E7B73]" />
+            </div>
+            <h3 className="text-[#2A0800] font-black text-lg mb-1">No reviews yet</h3>
+            <p className="text-[#8E7B73] text-sm font-bold">You haven't reviewed any orders.</p>
+          </div>
+        ) : (
+          reviews.map(review => (
+            <motion.div key={review.id} initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className="bg-[#FFFCF5] border border-[#EADDCD] shadow-sm rounded-2xl p-5 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[#780116] font-black text-base block">{review.restaurantName}</span>
+                  <span className="text-[#8E7B73] text-[10px] font-black uppercase tracking-wider">Order #{review.orderId}</span>
+                </div>
+                <div className="flex items-center gap-1 bg-[#FDF9F1] border border-[#F7B538]/30 px-2.5 py-1 rounded-full text-[#F7B538] font-black text-sm">
+                  <Star size={14} className="fill-[#F7B538]" /> {review.rating}.0
+                </div>
+              </div>
+              {review.comment && <p className="text-[#2A0800] text-sm font-medium italic">"{review.comment}"</p>}
+              <p className="text-[#8E7B73] text-xs font-bold">{new Date(review.createdAt).toLocaleDateString()}</p>
+            </motion.div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SupportTab() {
+  return (
+    <div className="p-6 sm:p-10">
+      <div className="mb-8 pb-6 border-b border-[#EADDCD]">
+        <h2 className="text-2xl font-display font-black text-[#780116]">Help & Support</h2>
+        <p className="text-[#8E7B73] font-bold text-sm">We are here to help you 24/7.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-[#FFFCF5] border border-[#EADDCD] rounded-3xl p-6 text-center hover:shadow-premium hover:border-[#F7B538] transition-all cursor-pointer group">
+          <div className="w-16 h-16 bg-white border border-[#EADDCD] rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-[#FDF9F1] transition-colors">
+            <MessageSquare size={24} className="text-[#F7B538]" />
+          </div>
+          <h3 className="text-[#780116] font-black text-lg mb-2">Live Chat</h3>
+          <p className="text-[#8E7B73] text-sm font-bold mb-4">Chat with our support executives instantly.</p>
+          <button className="px-5 py-2 rounded-full bg-[#780116] text-white font-black text-xs shadow-sm hover:bg-[#5a0010] transition-colors">Start Chat</button>
+        </div>
+
+        <div className="bg-[#FFFCF5] border border-[#EADDCD] rounded-3xl p-6 text-center hover:shadow-premium hover:border-[#F7B538] transition-all cursor-pointer group">
+          <div className="w-16 h-16 bg-white border border-[#EADDCD] rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-[#FDF9F1] transition-colors">
+            <Mail size={24} className="text-[#F7B538]" />
+          </div>
+          <h3 className="text-[#780116] font-black text-lg mb-2">Email Support</h3>
+          <p className="text-[#8E7B73] text-sm font-bold mb-4">Send us an email and we'll reply within 2 hours.</p>
+          <a href="mailto:support@urbanbites.com" className="inline-block px-5 py-2 rounded-full border-2 border-[#EADDCD] text-[#780116] font-black text-xs shadow-sm hover:bg-[#FDF9F1] transition-colors">support@urbanbites.com</a>
+        </div>
+      </div>
+
+      <div className="bg-white border border-[#EADDCD] shadow-sm rounded-3xl p-6">
+        <h3 className="text-[#780116] font-black text-lg mb-4">Frequently Asked Questions</h3>
+        <div className="space-y-4">
+          <details className="group border border-[#EADDCD] rounded-2xl p-4 bg-[#FFFCF5] cursor-pointer">
+            <summary className="font-black text-[#2A0800] outline-none list-none flex justify-between items-center">
+              Where is my refund?
+              <ChevronRight size={16} className="text-[#8E7B73] group-open:rotate-90 transition-transform" />
+            </summary>
+            <p className="text-[#8E7B73] text-sm font-bold mt-3 leading-relaxed">If your order was cancelled, the admin processes refunds manually within 24 hours. The money will reflect in your original payment method within 3-5 business days.</p>
+          </details>
+          <details className="group border border-[#EADDCD] rounded-2xl p-4 bg-[#FFFCF5] cursor-pointer">
+            <summary className="font-black text-[#2A0800] outline-none list-none flex justify-between items-center">
+              How do I report missing items?
+              <ChevronRight size={16} className="text-[#8E7B73] group-open:rotate-90 transition-transform" />
+            </summary>
+            <p className="text-[#8E7B73] text-sm font-bold mt-3 leading-relaxed">Please start a Live Chat with us and provide your Order ID. We will coordinate with the restaurant and resolve the issue immediately.</p>
+          </details>
+          <details className="group border border-[#EADDCD] rounded-2xl p-4 bg-[#FFFCF5] cursor-pointer">
+            <summary className="font-black text-[#2A0800] outline-none list-none flex justify-between items-center">
+              Can I change my delivery address?
+              <ChevronRight size={16} className="text-[#8E7B73] group-open:rotate-90 transition-transform" />
+            </summary>
+            <p className="text-[#8E7B73] text-sm font-bold mt-3 leading-relaxed">Once an order is confirmed, the address cannot be changed. However, you can contact the delivery agent once the order is out for delivery.</p>
+          </details>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── WALLET TAB ────────────────────────────────────────────────────────────────
+function WalletTab() {
+  const { data: balance, isLoading: balanceLoading } = useQuery({
+    queryKey: ['wallet-balance'],
+    queryFn: walletApi.getBalance,
+    staleTime: 0
+  });
+
+  const { data: history, isLoading: historyLoading } = useQuery({
+    queryKey: ['wallet-history'],
+    queryFn: walletApi.getHistory,
+    staleTime: 0
+  });
+
+  return (
+    <div className="p-6 sm:p-10">
+      <div className="mb-8 pb-6 border-b border-[#EADDCD] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-display font-black text-[#780116]">UrbanBites Wallet</h2>
+          <p className="text-[#8E7B73] font-bold text-sm">Manage your credits and refunds.</p>
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-br from-[#F7B538] to-[#f9cb6b] rounded-3xl p-8 text-[#2A0800] shadow-premium mb-8 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/20 blur-[80px] rounded-full pointer-events-none" />
+        <p className="font-bold text-sm uppercase tracking-wider mb-2 opacity-80">Available Balance</p>
+        <div className="flex items-baseline gap-2">
+          <span className="text-4xl sm:text-5xl font-black tracking-tight">₹{balance?.balance?.toFixed(2) || '0.00'}</span>
+        </div>
+        <p className="text-xs font-bold mt-4 opacity-75">Credits can be applied at checkout.</p>
+      </div>
+
+      <h3 className="text-[#780116] font-black text-lg mb-4">Transaction History</h3>
+      {historyLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-[#EADDCD]/30 rounded-2xl animate-pulse" />)}
+        </div>
+      ) : history?.length === 0 ? (
+        <div className="text-center py-10 bg-[#FFFCF5] rounded-3xl border border-[#EADDCD]">
+          <Wallet size={48} className="mx-auto text-[#EADDCD] mb-3" />
+          <p className="text-[#8E7B73] font-bold">No transactions yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {history?.map((tx) => (
+            <div key={tx.id} className="flex items-center justify-between p-4 bg-white border border-[#EADDCD] rounded-2xl hover:border-[#F7B538] transition-colors shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+                  tx.type === 'CREDIT' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                }`}>
+                  {tx.type === 'CREDIT' ? <ArrowDownRight size={20} /> : <ArrowUpRight size={20} />}
+                </div>
+                <div>
+                  <p className="text-[#2A0800] font-bold text-sm">{tx.description || tx.referenceType}</p>
+                  <p className="text-[#8E7B73] text-xs font-bold mt-1">
+                    {new Date(tx.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={`font-black ${tx.type === 'CREDIT' ? 'text-green-600' : 'text-[#2A0800]'}`}>
+                  {tx.type === 'CREDIT' ? '+' : '-'}₹{tx.amount?.toFixed(2)}
+                </p>
+                <p className="text-[#8E7B73] text-[10px] font-bold uppercase">{tx.type}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

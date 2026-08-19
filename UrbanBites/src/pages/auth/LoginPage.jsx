@@ -125,6 +125,7 @@ export default function LoginPage() {
       const res = await login({ email: formData.email, password: formData.password });
       if (!res.emailVerified) {
         setStep(5);
+        setOtpDigits(['', '', '', '', '', '']);
         setResendCooldown(30);
         try { await authApi.requestEmailVerificationOtp(); } catch(e){}
         return;
@@ -144,7 +145,7 @@ export default function LoginPage() {
     setIsProcessingOtp(true);
     setOtpError('');
     try {
-      await authApi.requestPhoneLoginOtp({ phone: formData.phone });
+      await authApi.requestPhoneOtp({ phone: formData.phone });
       toast.success('OTP sent to your phone!');
       setStep(2);
       setOtpDigits(['', '', '', '', '', '']);
@@ -285,6 +286,7 @@ export default function LoginPage() {
       setStep(1);
       setOtpError('Password reset successful! Please login.');
       setFormData({ ...formData, password: '', newPassword: '' });
+      setOtpDigits(['', '', '', '', '', '']);
     } catch (err) {
       setOtpError(err.response?.data?.message || 'Failed to reset password');
     } finally { setIsProcessingOtp(false); }

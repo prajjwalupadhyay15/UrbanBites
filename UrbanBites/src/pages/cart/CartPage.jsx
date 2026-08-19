@@ -4,14 +4,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ShoppingBag, ArrowLeft, MapPin, CreditCard, Plus, Minus, Trash2,
   AlertCircle, Receipt, Loader2, LogIn, UserPlus, UtensilsCrossed, Sparkles,
-  CheckCircle2, Package, ChefHat, Utensils, Bike, ShieldCheck
+  CheckCircle2, Package, ChefHat, Utensils, Bike, ShieldCheck, Tag, Wallet
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
 import { cartApi } from '../../api/cartApi';
 import { addressApi } from '../../api/userApi';
 import { customerOrderApi } from '../../api/orderApi';
+import { walletApi } from '../../api/walletApi';
 import AddressSelector from '../../components/common/AddressSelector';
 
 const IMAGE_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081';
@@ -36,8 +38,20 @@ export default function CartPage() {
 
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [useWallet, setUseWallet] = useState(false);
+
+  const { data: walletData } = useQuery({
+    queryKey: ['wallet-balance'],
+    queryFn: walletApi.getBalance,
+    enabled: isAuthenticated,
+  });
+
+  const walletBalance = walletData?.balance || 0;
   const [step, setStep] = useState('cart'); // cart → paying → success
   const [error, setError] = useState('');
+  const [couponCodeInput, setCouponCodeInput] = useState('');
+  const [couponError, setCouponError] = useState('');
+  const [shakeKey, setShakeKey] = useState(0);
 
   const subtotal = getTotalPrice();
 
@@ -50,18 +64,52 @@ export default function CartPage() {
     retry: 1,
   });
 
+  const { data: availableCoupons = [] } = useQuery({
+    queryKey: ['cart-available-coupons'],
+    queryFn: cartApi.getAvailableCoupons,
+    enabled: isAuthenticated && items.length > 0,
+    staleTime: 1000 * 60,
+  });
+
   const fees = preview?.fees;
   const serviceable = preview?.serviceable ?? true;
-  const deliveryFee = fees ? Number(fees.deliveryFee) : null;
+  const deliveryFee = (fees && fees.deliveryFee !== null && fees.deliveryFee !== undefined) ? Number(fees.deliveryFee) : null;
+  const packingCharge = fees ? Number(fees.packingCharge) : 0;
   const tax = fees ? Number(fees.tax) : null;
   const platformFee = fees ? Number(fees.platformFee) : 5;
-  const total = fees ? Number(fees.grandTotal) : (deliveryFee !== null ? subtotal + (deliveryFee || 0) + (tax || 0) + platformFee : subtotal + platformFee);
+  const total = fees ? Number(fees.grandTotal) : (deliveryFee !== null ? subtotal + deliveryFee + packingCharge + (tax || 0) + platformFee : subtotal + packingCharge + platformFee);
 
 
   // Payment mutations
   const placeOrderMut = useMutation({ mutationFn: customerOrderApi.placeOrder, onError: (err) => setError(err.response?.data?.message || 'Failed to place order') });
   const paymentMut = useMutation({ mutationFn: customerOrderApi.createPaymentIntent, onError: (err) => setError(err.response?.data?.message || 'Payment intent failed') });
   const simSuccessMut = useMutation({ mutationFn: customerOrderApi.simulatePaymentSuccess });
+
+  const applyCouponMut = useMutation({
+    mutationFn: (code) => cartApi.applyCoupon(code),
+    onSuccess: (data) => {
+      setCouponError('');
+      qc.invalidateQueries({ queryKey: ['cart-checkout-preview'] });
+      toast.success(data.message || 'Promo code applied!');
+    },
+    onError: (err) => {
+      setCouponError(err.response?.data?.message || 'Failed to apply coupon');
+      setShakeKey(prev => prev + 1);
+    },
+  });
+
+  const removeCouponMut = useMutation({
+    mutationFn: cartApi.removeCoupon,
+    onSuccess: (data) => {
+      setCouponCodeInput('');
+      setCouponError('');
+      qc.invalidateQueries({ queryKey: ['cart-checkout-preview'] });
+      toast.success(data.message || 'Coupon removed');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Failed to remove coupon');
+    },
+  });
 
   const [syncingItemId, setSyncingItemId] = useState(null);
 
@@ -95,6 +143,9 @@ export default function CartPage() {
 
   // Sync local Zustand cart to the server before placing order
   const syncCartToServer = async () => {
+    // 0. Remember applied coupon code
+    const couponToReapply = preview?.cart?.appliedCouponCode;
+
     // 1. Clear existing server cart items
     try { await cartApi.clearCart(); } catch { }
 
@@ -123,6 +174,11 @@ export default function CartPage() {
         }
       }
     }
+
+    // 3. Re-apply the coupon if there was one
+    if (couponToReapply) {
+      try { await cartApi.applyCoupon(couponToReapply); } catch { }
+    }
   };
 
   const handlePayNow = async () => {
@@ -137,6 +193,7 @@ export default function CartPage() {
         addressId: selectedAddressId || undefined,
         recipientName: user?.fullName || undefined,
         recipientPhone: user?.phone || undefined,
+        applyWalletBalance: useWallet,
       });
       const intent = await paymentMut.mutateAsync(order.orderId);
       if (intent.razorpayOrderId && intent.razorpayKeyId) {
@@ -336,6 +393,116 @@ export default function CartPage() {
           </motion.section>
         )}
 
+        {/* Promo Coupons Section */}
+        {isAuthenticated && (
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            className="bg-white rounded-[2rem] p-6 border border-[#EADDCD] shadow-sm space-y-4"
+          >
+            <div className="flex items-center gap-2">
+              <Tag size={18} className="text-[#F7B538]" />
+              <h3 className="text-lg font-black text-[#780116]">Promo Codes</h3>
+            </div>
+
+            {preview?.cart?.appliedCouponCode ? (
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-2xl p-4 text-green-700">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-green-600 font-black shrink-0 text-lg">
+                    %
+                  </div>
+                  <div>
+                    <p className="font-black text-sm tracking-wider uppercase">{preview.cart.appliedCouponCode}</p>
+                    <p className="text-xs font-bold text-green-600/80">Promo code applied</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeCouponMut.mutate()}
+                  disabled={removeCouponMut.isPending}
+                  className="text-xs font-black uppercase tracking-wider text-red-600 hover:text-red-700 px-3 py-2 rounded-xl bg-white border border-red-100 hover:border-red-200 transition-all shadow-sm"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <motion.div 
+                    key={shakeKey}
+                    animate={shakeKey > 0 ? { x: [-8, 8, -6, 6, -4, 4, 0] } : {}}
+                    transition={{ duration: 0.4 }}
+                    className="relative flex-1"
+                  >
+                    <Tag size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8E7B73]" />
+                    <input
+                      type="text"
+                      placeholder="Enter code (e.g. SAVE20)"
+                      value={couponCodeInput}
+                      onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
+                      className={`w-full bg-[#FFFCF5] border-2 text-[#2A0800] placeholder:text-[#AFA49F] rounded-2xl py-3.5 pl-11 pr-4 outline-none transition-all font-bold text-sm shadow-sm ${couponError ? 'border-red-500 focus:border-red-600 bg-red-50' : 'border-[#EADDCD] focus:border-[#F7B538] focus:bg-white'}`}
+                    />
+                  </motion.div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!couponCodeInput.trim()) return;
+                      applyCouponMut.mutate(couponCodeInput.trim());
+                    }}
+                    disabled={applyCouponMut.isPending || !couponCodeInput.trim()}
+                    className="px-6 rounded-2xl bg-[#780116] border-2 border-[#A00320] text-white font-black text-sm shadow-premium hover:-translate-y-0.5 active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    {applyCouponMut.isPending ? 'Applying...' : 'Apply'}
+                  </button>
+                </div>
+
+                {availableCoupons.length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    <p className="text-xs font-black text-[#8E7B73] uppercase tracking-widest pl-1">Available for you</p>
+                    <div className="space-y-2">
+                      {availableCoupons.map((coupon, i) => (
+                        <motion.div
+                          key={coupon.code}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border-2 border-dashed border-[#EADDCD] hover:border-[#F7B538] rounded-2xl transition-all shadow-sm cursor-pointer relative overflow-hidden"
+                          onClick={() => {
+                            setCouponCodeInput(coupon.code);
+                            applyCouponMut.mutate(coupon.code);
+                          }}
+                        >
+                          <div className="absolute -right-8 -top-8 w-24 h-24 bg-[#F7B538]/10 rounded-full blur-xl group-hover:bg-[#F7B538]/20 transition-all pointer-events-none" />
+                          <div className="flex items-start gap-3 relative z-10">
+                            <div className="w-10 h-10 rounded-xl bg-[#FDF9F1] border border-[#F7B538]/30 flex items-center justify-center shrink-0">
+                              <Tag size={18} className="text-[#F7B538]" />
+                            </div>
+                            <div>
+                              <p className="text-[#780116] font-black font-mono tracking-wider">{coupon.code}</p>
+                              <p className="text-[#8E7B73] text-xs font-medium mt-0.5 leading-relaxed pr-4">{coupon.description}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="mt-3 sm:mt-0 text-[#F7B538] font-black text-xs uppercase tracking-wider px-4 py-2 rounded-xl bg-[#FDF9F1] group-hover:bg-[#F7B538] group-hover:text-white transition-colors relative z-10 self-start sm:self-center"
+                          >
+                            Tap to Apply
+                          </button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {couponError && (
+              <p className="text-xs font-bold text-red-500 px-1 mt-2">{couponError}</p>
+            )}
+          </motion.section>
+        )}
+
         {/* Bill Summary */}
         <motion.section
           initial={{ opacity: 0, y: 12 }}
@@ -357,14 +524,53 @@ export default function CartPage() {
             <div className="space-y-3 mb-5 text-sm">
               <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Item Total</span><span className="text-[#2A0800] font-black">₹{subtotal.toFixed(0)}</span></div>
               <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Delivery Fee</span><span className="text-[#2A0800] font-black">{deliveryFee !== null ? `₹${deliveryFee}` : '--'}</span></div>
+              <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Packing Charge</span><span className="text-[#2A0800] font-black">₹{packingCharge.toFixed(0)}</span></div>
+              {fees?.discount > 0 && (
+                <div className="flex justify-between text-green-600 font-bold">
+                  <span>Discount</span>
+                  <span>-₹{Number(fees.discount).toFixed(0)}</span>
+                </div>
+              )}
               <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Taxes & Charges</span><span className="text-[#2A0800] font-black">{tax !== null ? `₹${tax}` : '--'}</span></div>
               <div className="flex justify-between"><span className="text-[#8E7B73] font-bold">Platform Fee</span><span className="text-[#2A0800] font-black">₹{platformFee}</span></div>
             </div>
           )}
 
-          <div className="flex justify-between items-center py-4 border-t border-dashed border-[#EADDCD]">
+          {walletBalance > 0 && (
+            <div className="mt-4 bg-[#FFFCF5] border border-[#EADDCD] rounded-2xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#F7B538]/10 rounded-full flex items-center justify-center shrink-0">
+                  <Wallet size={20} className="text-[#F7B538]" />
+                </div>
+                <div>
+                  <p className="text-[#780116] font-black text-sm">UrbanBites Wallet</p>
+                  <p className="text-[#8E7B73] text-xs font-bold mt-0.5">Available: ₹{walletBalance.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" checked={useWallet} onChange={(e) => setUseWallet(e.target.checked)} />
+                <div className="w-11 h-6 bg-[#EADDCD] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#F7B538]"></div>
+              </label>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center py-4 border-t border-dashed border-[#EADDCD] overflow-hidden mt-4">
             <span className="text-[#780116] font-black text-lg">To Pay</span>
-            <span className="text-[#2A0800] font-black text-2xl tracking-tight tabular-nums">₹{total.toLocaleString('en-IN')}</span>
+            <div className="text-[#2A0800] font-black text-2xl tracking-tight tabular-nums flex items-center">
+              <span>₹</span>
+              <AnimatePresence mode="popLayout">
+                <motion.span
+                  key={total}
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -20, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  className="inline-block"
+                >
+                  {total.toLocaleString('en-IN')}
+                </motion.span>
+              </AnimatePresence>
+            </div>
           </div>
 
           {!serviceable && preview?.serviceabilityReason && (
@@ -399,7 +605,9 @@ export default function CartPage() {
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-[#8E7B73] text-[10px] font-black uppercase tracking-widest">Total</p>
-            <p className="text-[#2A0800] font-black text-2xl tracking-tight tabular-nums">₹{total.toLocaleString('en-IN')}</p>
+            <p className="text-[#2A0800] font-black text-2xl tracking-tight tabular-nums">
+              ₹{Math.max(0, total - (useWallet ? walletBalance : 0)).toLocaleString('en-IN')}
+            </p>
           </div>
           <button
             disabled={!serviceable || items.length === 0 || step === 'paying'}

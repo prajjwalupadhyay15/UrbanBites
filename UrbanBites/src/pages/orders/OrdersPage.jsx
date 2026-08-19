@@ -1,15 +1,18 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Package, MapPin, Clock, ExternalLink, Navigation } from 'lucide-react';
+import { Package, MapPin, Clock, ExternalLink, Navigation, Star } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { customerOrderApi } from '../../api/orderApi';
 import { format } from 'date-fns';
+import ReviewModal from '../../components/specific/ReviewModal';
 
 const TRACKABLE_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'ACCEPTED_BY_RESTAURANT', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'];
 
 export default function OrdersPage() {
   const navigate = useNavigate();
+  const [activeReviewOrder, setActiveReviewOrder] = React.useState(null);
+
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['myOrders'],
     queryFn: customerOrderApi.listMyOrders
@@ -53,8 +56,9 @@ export default function OrdersPage() {
             return (
               <motion.div 
                 initial={{ opacity: 0, y: 20 }} 
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ delay: (i % 5) * 0.1, type: "spring", stiffness: 300, damping: 24 }}
                 key={order.orderId} 
                 className="bg-white rounded-[2rem] p-6 group border-2 border-[#EADDCD] hover:border-[#F7B538] transition-all shadow-sm"
               >
@@ -101,6 +105,24 @@ export default function OrdersPage() {
                       </button>
                     )}
                     
+                    {isDelivered && (
+                      order.reviewed ? (
+                        <button
+                          disabled
+                          className="flex items-center justify-center gap-2 px-6 py-3.5 bg-green-50 border-2 border-green-200 text-green-700 font-black rounded-2xl text-sm shrink-0 flex-1 sm:flex-none cursor-default"
+                        >
+                          Reviewed ✓
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setActiveReviewOrder(order)}
+                          className="flex items-center justify-center gap-2 px-6 py-3.5 bg-white border-2 border-[#EADDCD] hover:border-[#F7B538] hover:bg-[#FDF9F1] text-[#780116] font-black rounded-2xl shadow-sm hover:-translate-y-0.5 active:scale-[0.98] transition-all text-sm shrink-0 flex-1 sm:flex-none"
+                        >
+                          <Star size={16} className="text-[#F7B538] fill-[#F7B538]" /> Rate Order
+                        </button>
+                      )
+                    )}
+
                     {(isDelivered || isCancelled) && (
                       <button className="flex items-center justify-center gap-2 px-6 py-3.5 bg-white border-2 border-[#EADDCD] hover:border-[#F7B538] hover:bg-[#FDF9F1] text-[#780116] font-black rounded-2xl shadow-sm hover:-translate-y-0.5 active:scale-[0.98] transition-all text-sm shrink-0 flex-1 sm:flex-none">
                         Reorder <ExternalLink size={16}/>
@@ -112,6 +134,17 @@ export default function OrdersPage() {
             );
           })}
         </div>
+
+        {/* Review Modal */}
+        {activeReviewOrder && (
+          <ReviewModal
+            isOpen={!!activeReviewOrder}
+            onClose={() => setActiveReviewOrder(null)}
+            orderId={activeReviewOrder.orderId}
+            restaurantName={activeReviewOrder.restaurantName}
+            order={activeReviewOrder}
+          />
+        )}
       </div>
     </div>
   );

@@ -4,14 +4,19 @@ import com.prajjwal.UrbanBites.dto.request.AssignRestaurantZoneRequest;
 import com.prajjwal.UrbanBites.dto.request.CreateMenuItemRequest;
 import com.prajjwal.UrbanBites.dto.request.CreateRestaurantRequest;
 import com.prajjwal.UrbanBites.dto.request.CreateServiceZoneRequest;
+import com.prajjwal.UrbanBites.dto.request.OwnerReplyRequest;
 import com.prajjwal.UrbanBites.dto.request.UpdateMenuItemRequest;
 import com.prajjwal.UrbanBites.dto.request.UpdateRestaurantRequest;
 import com.prajjwal.UrbanBites.dto.response.MenuItemResponse;
 import com.prajjwal.UrbanBites.dto.response.RestaurantResponse;
+import com.prajjwal.UrbanBites.dto.response.ReviewResponse;
 import com.prajjwal.UrbanBites.dto.response.ServiceZoneResponse;
 import com.prajjwal.UrbanBites.service.ImageStorageService;
 import com.prajjwal.UrbanBites.service.MenuService;
 import com.prajjwal.UrbanBites.service.RestaurantService;
+import com.prajjwal.UrbanBites.service.ReviewService;
+import com.prajjwal.UrbanBites.service.MenuItemReviewService;
+import com.prajjwal.UrbanBites.dto.request.MenuItemReviewRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -45,15 +50,21 @@ public class RestaurantController {
     private final RestaurantService restaurantService;
     private final MenuService menuService;
     private final ImageStorageService imageStorageService;
+    private final ReviewService reviewService;
+    private final MenuItemReviewService menuItemReviewService;
 
     public RestaurantController(
             RestaurantService restaurantService,
             MenuService menuService,
-            ImageStorageService imageStorageService
+            ImageStorageService imageStorageService,
+            ReviewService reviewService,
+            MenuItemReviewService menuItemReviewService
     ) {
         this.restaurantService = restaurantService;
         this.menuService = menuService;
         this.imageStorageService = imageStorageService;
+        this.reviewService = reviewService;
+        this.menuItemReviewService = menuItemReviewService;
     }
 
     @PostMapping(value = "/me", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -105,11 +116,12 @@ public class RestaurantController {
             @RequestParam @NotNull @DecimalMin(value = "0.0", inclusive = false) BigDecimal price,
             @RequestParam boolean veg,
             @RequestParam boolean available,
+            @RequestParam(defaultValue = "true") boolean inStock,
             @RequestParam(required = false) String category,
             @RequestParam("image") MultipartFile image
     ) {
         String imagePath = imageStorageService.saveMenuItemImage(image);
-        CreateMenuItemRequest request = new CreateMenuItemRequest(name, description, price, veg, available, category);
+        CreateMenuItemRequest request = new CreateMenuItemRequest(name, description, price, veg, available, inStock, category);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(menuService.createMenuItem(principal.getName(), restaurantId, request, imagePath));
     }
@@ -125,11 +137,12 @@ public class RestaurantController {
             @RequestParam @NotNull @DecimalMin(value = "0.0", inclusive = false) BigDecimal price,
             @RequestParam boolean veg,
             @RequestParam boolean available,
+            @RequestParam(defaultValue = "true") boolean inStock,
             @RequestParam(required = false) String category,
             @RequestParam(value = "image", required = false) MultipartFile image
     ) {
         String imagePath = image == null || image.isEmpty() ? null : imageStorageService.saveMenuItemImage(image);
-        UpdateMenuItemRequest request = new UpdateMenuItemRequest(name, description, price, veg, available, category);
+        UpdateMenuItemRequest request = new UpdateMenuItemRequest(name, description, price, veg, available, inStock, category);
         return ResponseEntity.ok(menuService.updateMenuItem(principal.getName(), restaurantId, menuItemId, request, imagePath));
     }
 
@@ -151,6 +164,15 @@ public class RestaurantController {
         return ResponseEntity.ok(Map.of("message", "Menu item deleted"));
     }
 
+    @GetMapping("/me/{restaurantId}/analytics")
+    @PreAuthorize("hasRole('RESTAURANT_OWNER')")
+    public ResponseEntity<com.prajjwal.UrbanBites.dto.response.AnalyticsResponse> getAnalytics(
+            Principal principal,
+            @PathVariable Long restaurantId
+    ) {
+        return ResponseEntity.ok(restaurantService.getAnalytics(principal.getName(), restaurantId));
+    }
+
     @GetMapping("/me")
     @PreAuthorize("hasRole('RESTAURANT_OWNER')")
     public ResponseEntity<List<RestaurantResponse>> listMyRestaurants(Principal principal) {
@@ -161,6 +183,17 @@ public class RestaurantController {
     @PreAuthorize("hasRole('RESTAURANT_OWNER')")
     public ResponseEntity<List<MenuItemResponse>> listOwnerMenu(Principal principal, @PathVariable Long restaurantId) {
         return ResponseEntity.ok(menuService.listOwnerMenu(principal.getName(), restaurantId));
+    }
+
+    @PostMapping("/me/{restaurantId}/reviews/{reviewId}/reply")
+    @PreAuthorize("hasRole('RESTAURANT_OWNER')")
+    public ResponseEntity<ReviewResponse> replyToReview(
+            Principal principal,
+            @PathVariable Long restaurantId,
+            @PathVariable Long reviewId,
+            @Valid @RequestBody OwnerReplyRequest request
+    ) {
+        return ResponseEntity.ok(reviewService.replyToReview(principal.getName(), restaurantId, reviewId, request.reply()));
     }
 
     @GetMapping("/{restaurantId}/menu")
@@ -221,6 +254,18 @@ public class RestaurantController {
                 request.serviceZoneId(),
                 request.ruleType()
         ));
+    }
+
+    @PostMapping("/{restaurantId}/menu/{menuItemId}/reviews")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<Map<String, String>> addMenuItemReview(
+            Principal principal,
+            @PathVariable Long restaurantId,
+            @PathVariable Long menuItemId,
+            @Valid @RequestBody MenuItemReviewRequest request
+    ) {
+        menuItemReviewService.addReview(principal.getName(), restaurantId, menuItemId, request);
+        return ResponseEntity.ok(Map.of("message", "Review added successfully"));
     }
 }
 

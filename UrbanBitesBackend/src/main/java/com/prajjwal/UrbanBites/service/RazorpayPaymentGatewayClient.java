@@ -28,7 +28,11 @@ public class RazorpayPaymentGatewayClient implements PaymentGatewayClient {
         this.razorpayProperties = razorpayProperties;
         this.restClient = RestClient.builder()
                 .baseUrl(resolveBaseUrl(razorpayProperties.baseUrl()))
-                .defaultHeaders(httpHeaders -> httpHeaders.setBasicAuth(razorpayProperties.keyId(), razorpayProperties.keySecret()))
+                .defaultHeaders(httpHeaders -> {
+                    httpHeaders.setBasicAuth(razorpayProperties.keyId(), razorpayProperties.keySecret());
+                    httpHeaders.set("User-Agent", "UrbanBites/1.0");
+                    httpHeaders.set("Accept", "application/json");
+                })
                 .build();
     }
 
@@ -78,7 +82,8 @@ public class RazorpayPaymentGatewayClient implements PaymentGatewayClient {
 
     @Override
     public boolean verifyWebhookSignature(String payload, String signature) {
-        if (signature == null || signature.isBlank() || razorpayProperties.webhookSecret() == null || razorpayProperties.webhookSecret().isBlank()) {
+        if (signature == null || signature.isBlank() || razorpayProperties.webhookSecret() == null
+                || razorpayProperties.webhookSecret().isBlank()) {
             return false;
         }
 
@@ -110,4 +115,3 @@ public class RazorpayPaymentGatewayClient implements PaymentGatewayClient {
         }
     }
 }
-

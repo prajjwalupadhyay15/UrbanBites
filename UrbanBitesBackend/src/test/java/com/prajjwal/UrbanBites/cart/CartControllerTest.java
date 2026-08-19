@@ -266,8 +266,9 @@ class CartControllerTest {
 
         mockMvc.perform(post("/api/v1/cart/checkout-preview")
                         .header("Authorization", "Bearer " + customerToken))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Default address not found"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.serviceable").value(false))
+                .andExpect(jsonPath("$.serviceabilityReason").value("Please select a delivery address"));
     }
 
     @Test

@@ -16,26 +16,26 @@ export const dispatchApi = {
     return res.data;
   },
 
-  /** GET /api/v1/dispatch/agent/assignments/current — get current active assignment */
-  getCurrentAssignment: async () => {
+  /** GET /api/v1/dispatch/agent/assignments/current — get current active assignments */
+  getCurrentAssignments: async () => {
     try {
       const res = await apiClient.get('/api/v1/dispatch/agent/assignments/current');
       return res.data;
     } catch (error) {
-      console.warn("getCurrentAssignment error:", error?.response?.status, error?.response?.data);
-      if (error?.response?.status === 404) return null;
+      console.warn("getCurrentAssignments error:", error?.response?.status, error?.response?.data);
+      if (error?.response?.status === 404) return [];
       throw error;
     }
   },
 
-  /** GET /api/v1/dispatch/agent/assignments/current/details — detailed assignment view */
+  /** GET /api/v1/dispatch/agent/assignments/current/details — detailed assignments view */
   getCurrentAssignmentDetails: async () => {
     try {
       const res = await apiClient.get('/api/v1/dispatch/agent/assignments/current/details');
       return res.data;
     } catch (error) {
       console.warn("getCurrentAssignmentDetails error:", error?.response?.status, error?.response?.data);
-      if (error?.response?.status === 404 || error?.response?.status === 401) return null;
+      if (error?.response?.status === 404 || error?.response?.status === 401) return [];
       throw error;
     }
   },
@@ -60,6 +60,30 @@ export const dispatchApi = {
     } catch (error) {
       console.warn("getFinanceSummary error:", error?.response?.status, error?.response?.data);
       if (error?.response?.status === 401 || error?.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
+  /** GET /api/v1/dispatch/heatmap-zones */
+  getHeatmapZones: async () => {
+    try {
+      const res = await apiClient.get('/api/v1/dispatch/heatmap-zones');
+      return res.data;
+    } catch (error) {
+      console.warn("getHeatmapZones error:", error?.response?.status, error?.response?.data);
+      if (error?.response?.status === 401) return [];
+      throw error;
+    }
+  },
+
+  /** GET /api/v1/dispatch/agent/finance/milestone */
+  getMilestoneProgress: async () => {
+    try {
+      const res = await apiClient.get('/api/v1/dispatch/agent/finance/milestone');
+      return res.data;
+    } catch (error) {
+      console.warn("getMilestoneProgress error:", error?.response?.status, error?.response?.data);
+      if (error?.response?.status === 401) return null;
       throw error;
     }
   },

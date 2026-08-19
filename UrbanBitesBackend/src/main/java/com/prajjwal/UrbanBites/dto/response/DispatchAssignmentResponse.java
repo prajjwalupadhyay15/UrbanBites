@@ -1,6 +1,7 @@
 package com.prajjwal.UrbanBites.dto.response;
 
 import com.prajjwal.UrbanBites.enums.DispatchAssignmentStatus;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 public record DispatchAssignmentResponse(
@@ -10,7 +11,11 @@ public record DispatchAssignmentResponse(
         String agentName,
         DispatchAssignmentStatus status,
         int attemptNumber,
-        OffsetDateTime offerExpiresAt
+        OffsetDateTime offerExpiresAt,
+        String restaurantName,
+        String restaurantAddress,
+        String deliveryAddress,
+        BigDecimal agentPayoutAmount
 ) {
 }
 

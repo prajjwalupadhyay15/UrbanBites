@@ -53,6 +53,9 @@ class AdminServiceRealtimeTest {
     @Mock private NotificationService notificationService;
     @Mock private RealtimePublisher realtimePublisher;
     @Mock private SimpMessagingTemplate messagingTemplate;
+    @Mock private com.prajjwal.UrbanBites.repository.OrderItemRepository orderItemRepository;
+    @Mock private com.prajjwal.UrbanBites.service.PaymentGatewayClient paymentGatewayClient;
+    @Mock private com.prajjwal.UrbanBites.service.EmailSender emailSender;
 
     private AdminService adminService;
 
@@ -62,6 +65,7 @@ class AdminServiceRealtimeTest {
                 userRepository,
                 restaurantRepository,
                 orderRepository,
+                orderItemRepository,
                 paymentRepository,
                 pricingRuleRepository,
                 pricingRuleAuditRepository,
@@ -74,7 +78,9 @@ class AdminServiceRealtimeTest {
                 adminActionAuditRepository,
                 notificationService,
                 realtimePublisher,
-                messagingTemplate
+                messagingTemplate,
+                paymentGatewayClient,
+                emailSender
         );
     }
 

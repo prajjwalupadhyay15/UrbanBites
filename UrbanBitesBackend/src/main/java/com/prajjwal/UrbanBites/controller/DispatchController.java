@@ -51,14 +51,20 @@ public class DispatchController {
 
     @GetMapping("/agent/assignments/current")
     @PreAuthorize("hasRole('DELIVERY_AGENT')")
-    public ResponseEntity<DispatchAssignmentResponse> getCurrentAssignment(Principal principal) {
-        return ResponseEntity.ok(dispatchService.getMyCurrentAssignment(principal.getName()));
+    public ResponseEntity<List<DispatchAssignmentResponse>> getCurrentAssignments(Principal principal) {
+        return ResponseEntity.ok(dispatchService.getMyCurrentAssignments(principal.getName()));
     }
 
     @GetMapping("/agent/assignments/current/details")
     @PreAuthorize("hasRole('DELIVERY_AGENT')")
-    public ResponseEntity<DeliveryOrderDetailsResponse> getCurrentAssignmentDetails(Principal principal) {
+    public ResponseEntity<List<DeliveryOrderDetailsResponse>> getCurrentAssignmentDetails(Principal principal) {
         return ResponseEntity.ok(dispatchService.getMyCurrentAssignmentDetails(principal.getName()));
+    }
+
+    @GetMapping("/agent/finance/milestone")
+    @PreAuthorize("hasRole('DELIVERY_AGENT')")
+    public ResponseEntity<java.util.Map<String, Object>> getMilestoneProgress(Principal principal) {
+        return ResponseEntity.ok(dispatchService.getMilestoneProgress(principal.getName()));
     }
 
     @GetMapping("/agent/orders/history")
@@ -133,6 +139,12 @@ public class DispatchController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DispatchMetricsResponse> getMetrics(@RequestParam(defaultValue = "60") long sinceMinutes) {
         return ResponseEntity.ok(dispatchService.getMetrics(sinceMinutes));
+    }
+
+    @GetMapping("/heatmap-zones")
+    @PreAuthorize("hasRole('DELIVERY_AGENT')")
+    public ResponseEntity<List<com.prajjwal.UrbanBites.dto.response.HeatmapZoneResponse>> getHeatmapZones() {
+        return ResponseEntity.ok(dispatchService.getHeatmapZones());
     }
 }
 

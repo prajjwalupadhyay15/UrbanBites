@@ -35,8 +35,11 @@ public class MenuItem {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
 
-    @Column(name = "image_path", nullable = false, length = 500)
+    @Column(name = "image_path", length = 500)
     private String imagePath;
+
+    @Column(name = "is_in_stock", nullable = false)
+    private boolean inStock = true;
 
     @Column(name = "is_veg", nullable = false)
     private boolean veg;
@@ -53,11 +56,19 @@ public class MenuItem {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    @Column(name = "average_rating", precision = 3, scale = 2)
+    private BigDecimal averageRating = BigDecimal.ZERO;
+
+    @Column(name = "review_count")
+    private Integer reviewCount = 0;
+
     @PrePersist
     void prePersist() {
         OffsetDateTime now = OffsetDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        if (this.averageRating == null) this.averageRating = BigDecimal.ZERO;
+        if (this.reviewCount == null) this.reviewCount = 0;
     }
 
     @PreUpdate
@@ -76,11 +87,18 @@ public class MenuItem {
     public void setPrice(BigDecimal price) { this.price = price; }
     public String getImagePath() { return imagePath; }
     public void setImagePath(String imagePath) { this.imagePath = imagePath; }
+    public boolean isInStock() { return inStock; }
+    public void setInStock(boolean inStock) { this.inStock = inStock; }
     public boolean isVeg() { return veg; }
     public void setVeg(boolean veg) { this.veg = veg; }
     public boolean isAvailable() { return available; }
     public void setAvailable(boolean available) { this.available = available; }
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public BigDecimal getAverageRating() { return averageRating; }
+    public void setAverageRating(BigDecimal averageRating) { this.averageRating = averageRating; }
+    public Integer getReviewCount() { return reviewCount; }
+    public void setReviewCount(Integer reviewCount) { this.reviewCount = reviewCount; }
 }
-

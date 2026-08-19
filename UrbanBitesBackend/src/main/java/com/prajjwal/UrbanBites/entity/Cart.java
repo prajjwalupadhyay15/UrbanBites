@@ -23,6 +23,9 @@ public class Cart {
     @Column(nullable = false,length = 20)
     private CartState state = CartState.ACTIVE;
 
+    @Column(name = "applied_coupon_code", length = 80)
+    private String appliedCouponCode;
+
     @Column(name="created_at",nullable = false)
     private OffsetDateTime createdAt;
 
@@ -50,4 +53,6 @@ public class Cart {
     public void setState(CartState state){this.state = state;}
     public OffsetDateTime getCreatedAt() {return createdAt;}
     public OffsetDateTime getUpdatedAt() {return updatedAt;}
+    public String getAppliedCouponCode() {return appliedCouponCode;}
+    public void setAppliedCouponCode(String appliedCouponCode) {this.appliedCouponCode = appliedCouponCode;}
 }

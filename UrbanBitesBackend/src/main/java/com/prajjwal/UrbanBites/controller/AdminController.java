@@ -22,9 +22,16 @@ import com.prajjwal.UrbanBites.dto.response.AdminReviewModerationResponse;
 import com.prajjwal.UrbanBites.dto.response.AdminUserResponse;
 import com.prajjwal.UrbanBites.dto.response.AdminPartnerApprovalResponse;
 import com.prajjwal.UrbanBites.dto.response.AdminRestaurantApprovalResponse;
+import com.prajjwal.UrbanBites.dto.response.WithdrawalResponseDto;
+import com.prajjwal.UrbanBites.dto.request.AdminProcessWithdrawalRequestDto;
+import com.prajjwal.UrbanBites.entity.WithdrawalRequest;
+import com.prajjwal.UrbanBites.enums.WithdrawalStatus;
+import com.prajjwal.UrbanBites.repository.WithdrawalRequestRepository;
+import com.prajjwal.UrbanBites.service.WalletService;
 import com.prajjwal.UrbanBites.dto.response.DispatchAssignmentResponse;
 import com.prajjwal.UrbanBites.dto.response.WebhookAckResponse;
 import com.prajjwal.UrbanBites.entity.DispatchAssignment;
+import com.prajjwal.UrbanBites.entity.Order;
 import com.prajjwal.UrbanBites.enums.AdminDisputeStatus;
 import com.prajjwal.UrbanBites.service.AdminService;
 import jakarta.validation.Valid;
@@ -47,9 +54,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
 
     private final AdminService adminService;
+    private final WithdrawalRequestRepository withdrawalRequestRepository;
+    private final WalletService walletService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService,
+                           WithdrawalRequestRepository withdrawalRequestRepository,
+                           WalletService walletService) {
         this.adminService = adminService;
+        this.withdrawalRequestRepository = withdrawalRequestRepository;
+        this.walletService = walletService;
     }
 
     @GetMapping("/dashboard")
@@ -134,6 +147,7 @@ public class AdminController {
     }
 
     @GetMapping("/dispatch/no-agent")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ResponseEntity<List<DispatchAssignmentResponse>> noAgentAssignments() {
         return ResponseEntity.ok(adminService.listNoAgentAssignments().stream().map(this::toDispatchResponse).toList());
     }
@@ -255,14 +269,52 @@ public class AdminController {
     }
 
     private DispatchAssignmentResponse toDispatchResponse(DispatchAssignment assignment) {
+        Order order = assignment.getOrder();
         return new DispatchAssignmentResponse(
                 assignment.getId(),
-                assignment.getOrder().getId(),
+                order.getId(),
                 assignment.getAgentUser() == null ? null : assignment.getAgentUser().getId(),
                 assignment.getAgentUser() == null ? null : assignment.getAgentUser().getFullName(),
                 assignment.getStatus(),
                 assignment.getAttemptNumber(),
-                assignment.getOfferExpiresAt()
+                assignment.getOfferExpiresAt(),
+                order.getRestaurant() != null ? order.getRestaurant().getName() : "Unknown Restaurant",
+                order.getRestaurant() != null ? order.getRestaurant().getAddressLine() : "Unknown Address",
+                order.getDeliveryAddressLine1(),
+                assignment.getAgentPayoutAmount()
+        );
+    }
+
+    @GetMapping("/withdrawals/pending")
+    public ResponseEntity<List<WithdrawalResponseDto>> listPendingWithdrawals() {
+        List<WithdrawalResponseDto> pending = withdrawalRequestRepository.findByStatusOrderByCreatedAtDesc(WithdrawalStatus.PENDING)
+                .stream()
+                .map(this::toWithdrawalDto)
+                .toList();
+        return ResponseEntity.ok(pending);
+    }
+
+    @PostMapping("/withdrawals/{requestId}/process")
+    public ResponseEntity<WithdrawalResponseDto> processWithdrawal(
+            @PathVariable java.util.UUID requestId,
+            @Valid @RequestBody AdminProcessWithdrawalRequestDto request
+    ) {
+        WithdrawalRequest req = walletService.processWithdrawal(requestId, request.getApprove(), request.getAdminRemarks());
+        return ResponseEntity.ok(toWithdrawalDto(req));
+    }
+
+    private WithdrawalResponseDto toWithdrawalDto(WithdrawalRequest req) {
+        return new WithdrawalResponseDto(
+                req.getId(),
+                req.getUser().getFullName(),
+                req.getUser().getEmail(),
+                req.getAmount(),
+                req.getBankAccountNumber(),
+                req.getBankIfsc(),
+                req.getStatus(),
+                req.getAdminRemarks(),
+                req.getCreatedAt(),
+                req.getProcessedAt()
         );
     }
 }

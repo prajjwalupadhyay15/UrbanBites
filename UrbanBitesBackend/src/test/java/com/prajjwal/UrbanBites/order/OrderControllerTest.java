@@ -1138,6 +1138,7 @@ class OrderControllerTest {
                         return created;
                     });
             profile.setVerified(true);
+            profile.setApprovalStatus(ApprovalStatus.APPROVED);
             deliveryAgentProfileRepository.save(profile);
         }
     }

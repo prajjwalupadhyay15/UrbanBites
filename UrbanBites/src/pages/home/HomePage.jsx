@@ -44,23 +44,23 @@ function HeroMetrics() {
   return (
     <div className="flex flex-col md:flex-row items-center justify-center gap-6 mt-12 w-full max-w-4xl mx-auto z-20 relative">
       {/* Trust Badges */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} 
-        animate={{ opacity: 1, y: 0 }} 
-        transition={{ type: "spring", stiffness: 200, delay: 0.5 }} 
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 200, delay: 0.5 }}
         className="flex flex-wrap justify-center gap-4"
       >
         <div className="flex items-center gap-2 bg-white rounded-full px-5 py-4 shadow-sm hover:shadow-glow-orange hover:-translate-y-1 transition-all cursor-pointer">
-           <Zap size={18} className="text-[#F7B538] fill-[#F7B538] animate-bounce-slow" />
-           <span className="font-black text-[#780116] text-sm">Lightning Fast</span>
+          <Zap size={18} className="text-[#F7B538] fill-[#F7B538] animate-bounce-slow" />
+          <span className="font-black text-[#780116] text-sm">Lightning Fast</span>
         </div>
         <div className="flex items-center gap-2 bg-white rounded-full px-5 py-4 shadow-sm hover:shadow-glow-orange hover:-translate-y-1 transition-all cursor-pointer">
-           <Star size={18} className="text-[#F7B538] fill-[#F7B538] animate-pulse-orange" />
-           <span className="font-black text-[#780116] text-sm">Top Rated Spots</span>
+          <Star size={18} className="text-[#F7B538] fill-[#F7B538] animate-pulse-orange" />
+          <span className="font-black text-[#780116] text-sm">Top Rated Spots</span>
         </div>
         <div className="flex items-center gap-2 bg-white rounded-full px-5 py-4 shadow-sm hover:shadow-glow-orange hover:-translate-y-1 transition-all cursor-pointer">
-           <Flame size={18} className="text-[#F7B538] fill-[#F7B538]" />
-           <span className="font-black text-[#780116] text-sm">Hot & Fresh</span>
+          <Flame size={18} className="text-[#F7B538] fill-[#F7B538]" />
+          <span className="font-black text-[#780116] text-sm">Hot & Fresh</span>
         </div>
       </motion.div>
     </div>
@@ -71,7 +71,7 @@ export default function HomePage() {
   const { lat, lng, locationName } = useLocationStore();
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
-  
+
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 1000], [0, 150]);
   const y2 = useTransform(scrollY, [0, 1000], [0, -150]);
@@ -95,13 +95,13 @@ export default function HomePage() {
           VIBRANT HERO SECTION (Xanthous Base)
       ════════════════════════════════════════════ */}
       <section className="relative pt-32 pb-16 lg:pb-20 min-h-[95vh] flex flex-col items-center justify-center bg-[#F7B538] overflow-hidden rounded-b-[3rem] shadow-premium">
-        
+
         {/* Playful Floating Background Elements */}
         {HERO_FOODS.map((food, i) => (
           <motion.div
             key={food.id}
             style={{ y: i % 2 === 0 ? y1 : y2, top: food.top, left: food.left, right: food.right }}
-            className="absolute hidden lg:block w-40 h-40 rounded-full border-8 border-white/20 overflow-hidden shadow-2xl z-0 mix-blend-luminosity opacity-40 hover:mix-blend-normal hover:opacity-100 transition-all duration-500 cursor-pointer"
+            className="absolute block w-16 h-16 sm:w-24 sm:h-24 lg:w-48 lg:h-48 rounded-full border-4 sm:border-8 border-white overflow-hidden shadow-2xl z-0 opacity-85 hover:opacity-100 hover:scale-105 transition-all duration-500 cursor-pointer"
             animate={{ rotate: 360 }}
             transition={{ duration: 40 + i * 5, repeat: Infinity, ease: "linear" }}
           >
@@ -110,7 +110,7 @@ export default function HomePage() {
         ))}
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full text-center">
-          
+
           <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", bounce: 0.5 }}
             className="inline-flex items-center gap-2 bg-white rounded-full px-5 py-2.5 mb-8 shadow-glow-orange border-2 border-white/50">
             <MapPin size={16} className="text-[#780116]" />
@@ -118,8 +118,8 @@ export default function HomePage() {
           </motion.div>
 
           <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", bounce: 0.4, delay: 0.1 }}
-            className="text-6xl sm:text-7xl lg:text-[6rem] font-display font-black tracking-tight leading-[0.95] text-[#780116] mb-6">
-            Craving Something <br/>
+            className="text-5xl sm:text-6xl lg:text-[5rem] font-display font-black tracking-tight leading-[0.95] text-[#780116] mb-6">
+            Craving Something <br />
             <span className="text-white drop-shadow-md">Delicious?</span>
           </motion.h1>
 
@@ -146,7 +146,7 @@ export default function HomePage() {
       {/* ════════════════════════════════════════════
           CATEGORIES (Bright Pills)
       ════════════════════════════════════════════ */}
-      <motion.section 
+      <motion.section
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
@@ -158,7 +158,7 @@ export default function HomePage() {
             <p className="text-[#8E7B73] font-bold mt-2 text-lg">Find exactly what you're hungry for</p>
           </div>
         </div>
-        
+
         <div className="flex overflow-x-auto pb-6 -mx-4 px-4 sm:mx-0 sm:px-0 gap-4 custom-scrollbar">
           {CATEGORIES.map((cat, i) => (
             <motion.button key={cat.id}
@@ -179,7 +179,7 @@ export default function HomePage() {
       {/* ════════════════════════════════════════════
           RESTAURANT GRID
       ════════════════════════════════════════════ */}
-      <motion.section 
+      <motion.section
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
@@ -216,7 +216,7 @@ export default function HomePage() {
       {/* ════════════════════════════════════════════
           VIBRANT CTA BANNER
       ════════════════════════════════════════════ */}
-      <motion.section 
+      <motion.section
         initial={{ opacity: 0, scale: 0.95 }}
         whileInView={{ opacity: 1, scale: 1 }}
         viewport={{ once: true, margin: "-100px" }}
@@ -225,7 +225,7 @@ export default function HomePage() {
         <div className="relative rounded-[3rem] overflow-hidden p-12 sm:p-24 text-center bg-[#780116] shadow-premium group">
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJuIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iMC43IiBudW1PY3RhdmVzPSI0IiBzdGl0Y2hUaWxlcz0ic3RpdGNoIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsdGVyPSJ1cmwoI24pIiBvcGFjaXR5PSIwLjUiLz48L3N2Zz4=')] opacity-20 mix-blend-overlay" />
           <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#F7B538] rounded-full blur-[150px] -translate-y-1/2 translate-x-1/3 group-hover:scale-110 transition-transform duration-1000 opacity-60" />
-          
+
           <div className="relative z-10 flex flex-col items-center">
             <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-8 shadow-glow-orange animate-bounce-slow">
               <span className="text-5xl">🚀</span>

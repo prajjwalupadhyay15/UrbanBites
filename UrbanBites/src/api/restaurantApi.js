@@ -69,6 +69,11 @@ export const restaurantApi = {
     return res.data;
   },
 
+  getAnalytics: async (restaurantId) => {
+    const res = await apiClient.get(`/api/v1/restaurants/me/${restaurantId}/analytics`);
+    return res.data;
+  },
+
 
   /**
    * GET /api/v1/restaurants/me/{restaurantId}/menu  (owner — includes unavailable items)

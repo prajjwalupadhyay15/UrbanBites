@@ -204,4 +204,30 @@ export const adminApi = {
     const res = await apiClient.post('/api/v1/admin/disputes', body);
     return res.data;
   },
+
+  /** GET /api/v1/admin/disputes */
+  getDisputes: async (status = null) => {
+    const res = await apiClient.get('/api/v1/admin/disputes', { params: { status } });
+    return res.data;
+  },
+
+  /** PATCH /api/v1/admin/disputes/{disputeId}/status */
+  updateDisputeStatus: async (disputeId, status, resolutionNote = null) => {
+    const payload = { status };
+    if (resolutionNote) payload.resolutionNote = resolutionNote;
+    const res = await apiClient.patch(`/api/v1/admin/disputes/${disputeId}/status`, payload);
+    return res.data;
+  },
+
+  /** GET /api/v1/admin/withdrawals/pending */
+  getPendingWithdrawals: async () => {
+    const res = await apiClient.get('/api/v1/admin/withdrawals/pending');
+    return res.data;
+  },
+
+  /** POST /api/v1/admin/withdrawals/{requestId}/process */
+  processWithdrawal: async (requestId, body) => {
+    const res = await apiClient.post(`/api/v1/admin/withdrawals/${requestId}/process`, body);
+    return res.data;
+  },
 };

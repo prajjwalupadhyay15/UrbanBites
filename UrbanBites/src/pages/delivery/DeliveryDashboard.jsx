@@ -8,6 +8,7 @@ import { deliveryOrderApi } from '../../api/orderApi';
 import { userApi } from '../../api/userApi';
 import { notificationApi } from '../../api/notificationApi';
 import { trackingApi } from '../../api/trackingApi';
+import { walletApi } from '../../api/walletApi';
 import { Client } from '@stomp/stompjs';
 import toast from 'react-hot-toast';
 import SockJS from 'sockjs-client';
@@ -62,22 +63,27 @@ export default function DeliveryDashboard() {
   const [approvalError, setApprovalError] = useState('');
   const [geoError, setGeoError] = useState('');
   const [agentLocation, setAgentLocation] = useState(null);
+  const [incomingOffer, setIncomingOffer] = useState(null);
   const stompClientRef = useRef(null);
   
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'active'; // 'active', 'history', 'finance'
   const setActiveTab = (tab) => setSearchParams(tab === 'active' ? {} : { tab }, { replace: true });
+  
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawForm, setWithdrawForm] = useState({ amount: '', bankAccountNumber: '', bankIfsc: '' });
 
   // Fetch agent profile
   const { data: profile } = useQuery({
     queryKey: ['delivery-profile'],
     queryFn: userApi.getProfile,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 30,
+    refetchInterval: 30000,
   });
 
   useEffect(() => {
     if (profile) {
-      setIsOnline(profile.online && profile.available);
+      setIsOnline(profile.online);
     }
   }, [profile]);
 
@@ -90,22 +96,31 @@ export default function DeliveryDashboard() {
   const approvalStatus = profile?.approvalStatus || resolveAgentApprovalStatus(notifications);
 
   // 1. Current assignment polling (fallback 8s) + WebSocket Real-Time Integration
-  const { data: assignment, isLoading: assignLoading, refetch } = useQuery({
+  const { data: assignments = [], isLoading: assignLoading, refetch } = useQuery({
     queryKey: ['delivery-current-assignment'],
-    queryFn: dispatchApi.getCurrentAssignment,
+    queryFn: dispatchApi.getCurrentAssignments,
     refetchInterval: isOnline ? 8000 : false,
     staleTime: 3000,
     retry: false,
   });
 
-  const hasActiveAssignment = !!assignment && ['OFFERED', 'ACCEPTED', 'PICKED_UP'].includes(assignment.status);
+  const hasActiveAssignment = assignments.length > 0 && assignments.some(a => ['OFFERED', 'ACCEPTED', 'PICKED_UP'].includes(a.status));
 
   // 2. Fetch Active Assignment Data via new endpoint! (restaurant address, items, etc)
-  const { data: details, isLoading: detailsLoading, refetch: refetchDetails } = useQuery({
-    queryKey: ['delivery-assignment-details', assignment?.assignmentId],
+  const { data: detailsList = [], isLoading: detailsLoading, refetch: refetchDetails } = useQuery({
+    queryKey: ['delivery-assignment-details'],
     queryFn: dispatchApi.getCurrentAssignmentDetails,
     enabled: hasActiveAssignment,
     refetchInterval: isOnline ? 8000 : false,
+    retry: false,
+  });
+
+  // Fetch milestone gamification data
+  const { data: milestoneProgress } = useQuery({
+    queryKey: ['delivery-milestone-progress'],
+    queryFn: dispatchApi.getMilestoneProgress,
+    enabled: isOnline,
+    refetchInterval: 60000,
     retry: false,
   });
 
@@ -132,6 +147,44 @@ export default function DeliveryDashboard() {
     retry: false,
   });
 
+  // Wallet queries
+  const { data: walletData, isLoading: walletLoading } = useQuery({
+    queryKey: ['delivery-wallet-balance'],
+    queryFn: walletApi.getBalance,
+    enabled: activeTab === 'finance',
+    retry: false,
+  });
+
+  const { data: withdrawals = [], isLoading: withdrawalsLoading } = useQuery({
+    queryKey: ['delivery-wallet-withdrawals'],
+    queryFn: walletApi.getWithdrawals,
+    enabled: activeTab === 'finance',
+    retry: false,
+  });
+
+  const withdrawMut = useMutation({
+    mutationFn: walletApi.withdraw,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['delivery-wallet-balance'] });
+      qc.invalidateQueries({ queryKey: ['delivery-wallet-withdrawals'] });
+      toast.success('Withdrawal request submitted!');
+      setShowWithdrawModal(false);
+      setWithdrawForm({ amount: '', bankAccountNumber: '', bankIfsc: '' });
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to submit withdrawal');
+    }
+  });
+
+  // 5. Fetch Heatmap Zones
+  const { data: heatmapZones = [] } = useQuery({
+    queryKey: ['delivery-heatmap-zones'],
+    queryFn: dispatchApi.getHeatmapZones,
+    enabled: isOnline && !hasActiveAssignment && activeTab === 'active',
+    refetchInterval: 30000,
+    retry: false,
+  });
+
   // Real-time STOMP Subscription for instant assignment offers
   useEffect(() => {
     if (!user?.id || !isOnline) return;
@@ -150,8 +203,14 @@ export default function DeliveryDashboard() {
     stompClient.onConnect = () => {
       stompClientRef.current = stompClient;
       stompClient.subscribe(`/topic/agents/${user.id}/offers`, (message) => {
-        qc.invalidateQueries(['delivery-current-assignment']);
-        try { new Audio('/notification.mp3').play(); } catch (e) { /* ignore */ }
+        if (message.body) {
+          const event = JSON.parse(message.body);
+          if (event.eventType === 'AGENT_OFFERED') {
+            setIncomingOffer(event.snapshot);
+            try { new Audio('/notification.mp3').play(); } catch (e) { /* ignore */ }
+          }
+        }
+        qc.invalidateQueries({ queryKey: ['delivery-current-assignment'] });
       });
     };
 
@@ -166,9 +225,9 @@ export default function DeliveryDashboard() {
   const availabilityMut = useMutation({
     mutationFn: dispatchApi.updateAvailability,
     onSuccess: (data) => {
-      setIsOnline(data.online && data.available);
+      setIsOnline(data.online);
       setApprovalError('');
-      toast.success(data.online && data.available ? 'You are now online!' : 'You are now offline');
+      toast.success(data.online ? 'You are now online!' : 'You are now offline');
     },
     onError: (err) => {
       if (err?.response?.status === 403) {
@@ -219,35 +278,54 @@ export default function DeliveryDashboard() {
     if (!isOnline || !user?.id) return;
 
     let watchId;
+    let lastLat = null;
+    let lastLng = null;
+    let lastSpeed = 0;
+
+    const pingServer = () => {
+      if (lastLat === null || lastLng === null) return;
+      if (stompClientRef.current && stompClientRef.current.connected) {
+        stompClientRef.current.publish({
+          destination: '/app/tracking/agent/ping',
+          body: JSON.stringify({
+            latitude: lastLat,
+            longitude: lastLng,
+            speedKmph: lastSpeed
+          })
+        });
+      } else if (assignments && assignments.length > 0) {
+        // Fallback to HTTP REST endpoint if WebSocket is not connected but we have active assignments
+        assignments.forEach(asgn => {
+          trackingApi.pingLocation(asgn.orderId, lastLat, lastLng).catch(() => {});
+        });
+      }
+    };
+
     if ('geolocation' in navigator) {
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const speed = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
+          lastLat = pos.coords.latitude;
+          lastLng = pos.coords.longitude;
+          lastSpeed = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
           
-          setAgentLocation([lat, lng]);
-
-          if (stompClientRef.current && stompClientRef.current.connected) {
-            stompClientRef.current.publish({
-              destination: '/app/tracking/agent/ping',
-              body: JSON.stringify({
-                latitude: lat,
-                longitude: lng,
-                speedKmph: speed
-              })
-            });
-          } else if (assignment?.orderId) {
-            // Fallback to HTTP REST endpoint if WebSocket is not connected but we have an active assignment
-            trackingApi.pingLocation(assignment.orderId, lat, lng).catch(() => {});
-          }
+          setAgentLocation([lastLat, lastLng]);
+          pingServer(); // Ping immediately on actual change
         },
-        (error) => console.error("Agent Live Tracking failed:", error),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        (err) => {
+          setGeoError(err.message);
+        },
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
       );
     }
-    return () => { if (watchId !== undefined) navigator.geolocation.clearWatch(watchId); };
-  }, [isOnline, user?.id, assignment?.orderId]);
+
+    // Force a heartbeat ping every 30 seconds to prevent backend auto-offline
+    const heartbeatInterval = setInterval(pingServer, 30000);
+
+    return () => {
+      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+      clearInterval(heartbeatInterval);
+    };
+  }, [isOnline, user?.id, assignments]);
 
   // ── Auto-refresh data when tabs are switched ──────────────────────────────
   useEffect(() => {
@@ -283,8 +361,7 @@ export default function DeliveryDashboard() {
     }
   };
 
-  const asgn = assignment;
-  const asgCfg = ASSIGNMENT_STATUS_CFG[asgn?.status] || null;
+
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-[#FFFCF5] to-[#FDF9F1] relative overflow-hidden font-sans">
@@ -393,7 +470,7 @@ export default function DeliveryDashboard() {
             <motion.div key="active" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="bg-[#FFFCF5] border border-[#EADDCD] rounded-[2.5rem] overflow-hidden shadow-premium relative">
                 
-                {hasActiveAssignment && asgn.status === 'OFFERED' && (
+                {hasActiveAssignment && assignments.some(a => a.status === 'OFFERED') && (
                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#F7B538] to-orange-400 animate-pulse" />
                 )}
 
@@ -421,29 +498,141 @@ export default function DeliveryDashboard() {
                       {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-[#EADDCD]/30 rounded-2xl animate-pulse" />)}
                     </div>
                   ) : !hasActiveAssignment ? (
-                    <div className="py-16 text-center">
-                      <div className="w-20 h-20 mx-auto bg-white border border-[#EADDCD] rounded-full flex items-center justify-center mb-5 shadow-sm">
-                        <Bike size={32} className="text-[#D2C5B8]" />
-                      </div>
-                      <h3 className="text-xl font-black text-[#780116] mb-2 font-display">
+                    <div className="py-8 text-center flex flex-col items-center">
+                      {/* Radar Animation for Online State */}
+                      {isOnline ? (
+                        <div className="relative w-32 h-32 mb-6 flex items-center justify-center">
+                          {/* Pulsing rings */}
+                          <div className="absolute inset-0 rounded-full border-2 border-[#F7B538] opacity-20 animate-ping" style={{ animationDuration: '3s' }} />
+                          <div className="absolute inset-4 rounded-full border-2 border-[#F7B538] opacity-40 animate-ping" style={{ animationDuration: '3s', animationDelay: '0.5s' }} />
+                          <div className="absolute inset-8 rounded-full border-2 border-[#F7B538] opacity-60 animate-ping" style={{ animationDuration: '3s', animationDelay: '1s' }} />
+                          
+                          {/* Core Radar Background */}
+                          <div className="absolute inset-0 rounded-full bg-[#FDF9F1] border border-[#F7B538]/30 shadow-[0_0_30px_rgba(247,181,56,0.2)] overflow-hidden">
+                             {/* Sweeping Conic Radar */}
+                             <div 
+                               className="absolute inset-0 animate-spin rounded-full" 
+                               style={{ 
+                                 animationDuration: '2.5s',
+                                 background: 'conic-gradient(from 0deg, transparent 70%, rgba(247, 181, 56, 0.6) 100%)' 
+                               }} 
+                             />
+                             {/* Small radar line at the leading edge */}
+                             <div 
+                               className="absolute inset-0 animate-spin rounded-full" 
+                               style={{ animationDuration: '2.5s' }}
+                             >
+                                <div className="absolute top-0 left-1/2 w-[2px] h-1/2 bg-[#F7B538] origin-bottom shadow-[0_0_8px_#F7B538]" />
+                             </div>
+                          </div>
+
+                          {/* Center Searching Logo */}
+                          <div className="relative z-10 w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-md border border-[#F7B538]/50">
+                            <Navigation size={20} className="text-[#F7B538] animate-pulse" />
+                          </div>
+                        </div>
+                      ) : (
+                         <div className="w-24 h-24 mx-auto bg-[#FDF9F1] border border-[#EADDCD] rounded-full flex items-center justify-center mb-6 shadow-sm">
+                            <Bike size={40} className="text-[#D2C5B8]" />
+                         </div>
+                      )}
+
+                      <h3 className="text-2xl font-black text-[#780116] mb-2 font-display">
                         {isOnline ? 'Scanning for orders…' : 'You are offline'}
                       </h3>
-                      <p className="text-[#8E7B73] text-sm font-bold max-w-xs mx-auto">
+                      <p className="text-[#8E7B73] text-sm font-bold max-w-sm mx-auto mb-6">
                         {isOnline
-                          ? 'Stay online — high paying orders in your zone will be matched to you directly.'
+                          ? 'Wait near high demand zones (highlighted in red) to receive orders faster.'
                           : 'Go online to start receiving delivery requests.'}
                       </p>
+                      
+                      {isOnline && agentLocation ? (
+                        <div className="w-full h-80 rounded-2xl overflow-hidden border border-[#EADDCD] shadow-sm relative">
+                           <MapContainer
+                             center={agentLocation}
+                             zoom={13}
+                             style={{ height: '100%', width: '100%' }}
+                             scrollWheelZoom={true}
+                             zoomControl={false}
+                           >
+                             <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+                             
+                             {/* Agent Marker */}
+                             <Marker position={agentLocation} icon={agentIcon}>
+                               <Popup>Your Location</Popup>
+                             </Marker>
+                             
+                             {/* Heatmap Zones (Simulated with CircleMarkers) */}
+                             {heatmapZones.map((zone, idx) => (
+                               <React.Fragment key={idx}>
+                                 {/* Core hot zone */}
+                                 <Marker 
+                                   position={[zone.latitude, zone.longitude]} 
+                                   icon={L.divIcon({
+                                     className: 'heatmap-icon',
+                                     html: `<div style="width:${20 + (zone.weight * 5)}px;height:${20 + (zone.weight * 5)}px;background:rgba(239,68,68,0.4);border-radius:50%;filter:blur(4px);"></div>`,
+                                     iconSize: [20 + (zone.weight * 5), 20 + (zone.weight * 5)],
+                                     iconAnchor: [(20 + (zone.weight * 5))/2, (20 + (zone.weight * 5))/2]
+                                   })} 
+                                 />
+                                 <Marker 
+                                   position={[zone.latitude, zone.longitude]} 
+                                   icon={L.divIcon({
+                                     className: 'heatmap-icon-core',
+                                     html: `<div style="width:12px;height:12px;background:rgba(220,38,38,0.8);border-radius:50%;border:2px solid white;"></div>`,
+                                     iconSize: [12, 12],
+                                     iconAnchor: [6, 6]
+                                   })} 
+                                 >
+                                   <Popup>High Demand Zone ({zone.weight} orders)</Popup>
+                                 </Marker>
+                               </React.Fragment>
+                             ))}
+                             
+                             <MapFitter points={[agentLocation, ...heatmapZones.map(z => [z.latitude, z.longitude])]} />
+                           </MapContainer>
+                        </div>
+                      ) : (
+                        <div className="py-8" />
+                      )}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      
-                      {/* Left: Action Control Center */}
-                      <div className="lg:col-span-2 space-y-4">
-                        <div className={`p-6 rounded-[2rem] border relative overflow-hidden shadow-sm ${
-                          asgn.status === 'OFFERED' ? 'bg-white border-yellow-200' :
-                          asgn.status === 'ACCEPTED' ? 'bg-white border-blue-200' :
-                          'bg-white border-[#F7B538]/40'
-                        }`}>
+                    <div className="space-y-8">
+                      {/* Milestone Progress Bar */}
+                      {milestoneProgress && (
+                        <div className="bg-white border-2 border-[#F7B538]/30 rounded-[2rem] p-6 shadow-[0_0_15px_rgba(247,181,56,0.1)]">
+                           <div className="flex justify-between items-center mb-4">
+                             <div>
+                               <h3 className="font-display font-black text-[#780116] text-xl">Daily Goal Bonus</h3>
+                               <p className="text-sm font-bold text-[#8E7B73]">Complete {milestoneProgress.target} deliveries for a ₹{milestoneProgress.bonusAmount} bonus!</p>
+                             </div>
+                             <div className="w-12 h-12 bg-[#FFFCF5] rounded-full flex items-center justify-center border border-[#F7B538]/40 shadow-sm">
+                               <Gift size={24} className="text-[#F7B538]" />
+                             </div>
+                           </div>
+                           <div className="w-full bg-[#EADDCD]/50 h-3 rounded-full overflow-hidden">
+                             <div 
+                               className="bg-gradient-to-r from-[#F7B538] to-yellow-400 h-full rounded-full transition-all duration-500" 
+                               style={{ width: `${Math.min(100, (milestoneProgress.current / milestoneProgress.target) * 100)}%` }}
+                             />
+                           </div>
+                           <p className="text-right text-xs font-black text-[#F7B538] mt-2">{milestoneProgress.current} / {milestoneProgress.target} deliveries</p>
+                        </div>
+                      )}
+
+                      {assignments.map(asgn => {
+                         const details = detailsList.find(d => d.assignmentId === asgn.assignmentId);
+                         const asgCfg = getAssignmentConfig(asgn.status);
+                         return (
+                            <div key={asgn.assignmentId} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                              
+                              {/* Left: Action Control Center */}
+                              <div className="lg:col-span-2 space-y-4">
+                                <div className={`p-6 rounded-[2rem] border relative overflow-hidden shadow-sm ${
+                                  asgn.status === 'OFFERED' ? 'bg-white border-yellow-200' :
+                                  asgn.status === 'ACCEPTED' ? 'bg-white border-blue-200' :
+                                  'bg-white border-[#F7B538]/40'
+                                }`}>
                            <div className="flex items-center justify-between mb-6">
                              <div className="flex items-center gap-3">
                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${asgCfg.color}`}>
@@ -665,21 +854,19 @@ export default function DeliveryDashboard() {
                              ))}
                            </div>
 
-                           <div className="space-y-3 text-sm pt-2">
-                              <div className="flex justify-between">
-                                <span className="text-[#8E7B73] font-bold">Subtotal Value</span>
-                                <span className="text-[#2A0800] font-black">₹{details.grandTotal}</span>
-                              </div>
+                            <div className="space-y-3 text-sm pt-2">
                               <div className="flex justify-between font-black text-green-700 p-3 bg-green-50 rounded-xl border border-green-200">
-                                <span>Estimated Fee</span>
-                                <span>₹{details.deliveryFee || '50.00'}</span>
+                                <span>Your Payout</span>
+                                <span>₹{details.deliveryFee || '0.00'}</span>
                               </div>
                            </div>
-                        </div>
-                      )}
-
-                    </div>
-                  )}
+                         </div>
+                       )}
+                     </div>
+                   );
+                 })}
+               </div>
+             )}
                 </div>
               </div>
             </motion.div>
@@ -753,13 +940,37 @@ export default function DeliveryDashboard() {
                   onClick={() => {
                     qc.invalidateQueries({ queryKey: ['delivery-finance-summary'] });
                     qc.invalidateQueries({ queryKey: ['delivery-finance-transactions'] });
+                    qc.invalidateQueries({ queryKey: ['delivery-wallet-balance'] });
+                    qc.invalidateQueries({ queryKey: ['delivery-wallet-withdrawals'] });
                   }}
-                  disabled={financeLoading || txLoading}
+                  disabled={financeLoading || txLoading || walletLoading}
                   className="flex items-center gap-2 px-4 py-2 text-sm font-black text-[#780116] bg-[#FDF9F1] border border-[#EADDCD] rounded-2xl hover:bg-[#F7B538]/10 disabled:opacity-50 transition-all active:scale-95"
                 >
-                  <RefreshCw size={16} className={financeLoading || txLoading ? 'animate-spin' : ''} />
+                  <RefreshCw size={16} className={financeLoading || txLoading || walletLoading ? 'animate-spin' : ''} />
                   <span>REFRESH</span>
                 </button>
+              </div>
+
+              {/* Wallet Card */}
+              <div className="bg-gradient-to-r from-[#2A0800] to-[#780116] rounded-[2.5rem] p-6 text-white shadow-premium relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
+                <div className="absolute top-0 right-0 p-8 opacity-[0.03]">
+                  <CreditCard size={120} />
+                </div>
+                <div className="relative z-10 w-full">
+                   <p className="text-[#F7B538] font-bold text-sm uppercase tracking-wider mb-2">Available Wallet Balance</p>
+                   <h2 className="text-4xl md:text-5xl font-black font-display mb-1">
+                      ₹{walletData?.balance != null ? Number(walletData.balance).toFixed(2) : '0.00'}
+                   </h2>
+                </div>
+                <div className="relative z-10 w-full md:w-auto">
+                   <button 
+                     onClick={() => setShowWithdrawModal(true)}
+                     disabled={!walletData?.balance || walletData.balance <= 0}
+                     className="w-full md:w-auto px-6 py-4 bg-[#F7B538] text-[#2A0800] rounded-2xl font-black hover:bg-[#ffc65c] transition-colors shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                   >
+                     Withdraw to Bank
+                   </button>
+                </div>
               </div>
 
               {/* Summary Cards */}
@@ -810,11 +1021,165 @@ export default function DeliveryDashboard() {
                  </div>
               </div>
 
+              {/* Withdrawals List */}
+              {withdrawals.length > 0 && (
+                <div className="bg-white border border-[#EADDCD] shadow-sm rounded-[2.5rem] overflow-hidden mt-8">
+                   <div className="px-6 py-5 border-b border-[#EADDCD] bg-[#FDF9F1]">
+                      <h3 className="text-[#780116] font-black text-lg flex items-center gap-2 font-display">
+                         <History size={18} className="text-[#F7B538]" /> Withdrawal History
+                      </h3>
+                   </div>
+                   <div className="p-0">
+                      <div className="divide-y divide-[#EADDCD] border-t-0">
+                        {withdrawals.map((w) => (
+                          <div key={w.id} className="flex justify-between items-center px-6 py-4 hover:bg-[#FFFCF5] transition-colors">
+                            <div>
+                               <p className="text-[#2A0800] font-bold">Bank Acc: ****{w.bankAccountNumber.slice(-4)}</p>
+                               <span className="text-[#8E7B73] text-xs font-bold">{new Date(w.createdAt).toLocaleString()}</span>
+                               <span className={`ml-3 text-xs font-black px-2 py-0.5 rounded-full ${w.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : w.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                 {w.status}
+                               </span>
+                            </div>
+                            <div className="text-right">
+                               <p className="text-[#780116] font-black text-lg">₹{w.amount}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                   </div>
+                </div>
+              )}
+
             </motion.div>
           )}
 
         </AnimatePresence>
       </div>
+
+      {/* NEW OFFER POPUP OVERLAY */}
+      <AnimatePresence>
+        {incomingOffer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-[#2A0800]/40 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-[#FFFCF5] border-4 border-[#F7B538] shadow-premium rounded-[2.5rem] p-8 max-w-sm w-full relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-2 bg-[#F7B538] animate-pulse"></div>
+
+              <div className="flex justify-center mb-6">
+                <div className="w-20 h-20 bg-[#F7B538]/20 rounded-full flex items-center justify-center border-4 border-white shadow-sm relative">
+                  <div className="absolute inset-0 rounded-full border-2 border-[#F7B538] animate-ping opacity-20"></div>
+                  <Bike size={32} className="text-[#F7B538] animate-bounce" />
+                </div>
+              </div>
+
+              <h2 className="text-2xl font-black text-[#780116] text-center mb-2 font-display">New Delivery Offer!</h2>
+              <p className="text-center text-[#8E7B73] font-bold mb-6">Order #{incomingOffer.orderId}</p>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    acceptMut.mutate(incomingOffer.orderId);
+                    setIncomingOffer(null);
+                  }}
+                  disabled={acceptMut.isPending}
+                  className="w-full py-4 rounded-2xl bg-[#780116] border-2 border-[#A00320] text-white font-black text-lg shadow-premium hover:-translate-y-1 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 size={24} />
+                  Accept Delivery
+                </button>
+
+                <button
+                  onClick={() => {
+                    rejectMut.mutate(incomingOffer.orderId);
+                    setIncomingOffer(null);
+                  }}
+                  disabled={rejectMut.isPending}
+                  className="w-full py-3.5 rounded-2xl bg-white border border-[#EADDCD] text-[#2A0800] font-black hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all shadow-sm disabled:opacity-50"
+                >
+                  Pass (Reject Offer)
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Withdrawal Modal */}
+      <AnimatePresence>
+        {showWithdrawModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-[#2A0800]/40 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white border-4 border-[#F7B538] shadow-premium rounded-[2.5rem] p-8 max-w-md w-full relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-4">
+                 <button onClick={() => setShowWithdrawModal(false)} className="text-[#8E7B73] hover:text-[#780116]"><XCircle size={24}/></button>
+              </div>
+              <h2 className="text-2xl font-black text-[#780116] mb-6 font-display flex items-center gap-2"><CreditCard className="text-[#F7B538]"/> Withdraw Funds</h2>
+              
+              <form onSubmit={(e) => { e.preventDefault(); withdrawMut.mutate(withdrawForm); }} className="space-y-4">
+                 <div>
+                    <label className="block text-sm font-bold text-[#8E7B73] mb-1">Amount to Withdraw (Max: ₹{walletData?.balance})</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      max={walletData?.balance}
+                      required 
+                      value={withdrawForm.amount}
+                      onChange={e => setWithdrawForm({...withdrawForm, amount: e.target.value})}
+                      className="w-full px-4 py-3 bg-[#FDF9F1] border-2 border-[#EADDCD] rounded-2xl focus:outline-none focus:border-[#F7B538] font-bold text-[#2A0800]"
+                      placeholder="e.g. 500.00"
+                    />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-bold text-[#8E7B73] mb-1">Bank Account Number</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={withdrawForm.bankAccountNumber}
+                      onChange={e => setWithdrawForm({...withdrawForm, bankAccountNumber: e.target.value})}
+                      className="w-full px-4 py-3 bg-[#FDF9F1] border-2 border-[#EADDCD] rounded-2xl focus:outline-none focus:border-[#F7B538] font-bold text-[#2A0800]"
+                      placeholder="Account Number"
+                    />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-bold text-[#8E7B73] mb-1">Bank IFSC Code</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={withdrawForm.bankIfsc}
+                      onChange={e => setWithdrawForm({...withdrawForm, bankIfsc: e.target.value})}
+                      className="w-full px-4 py-3 bg-[#FDF9F1] border-2 border-[#EADDCD] rounded-2xl focus:outline-none focus:border-[#F7B538] font-bold text-[#2A0800] uppercase"
+                      placeholder="IFSC Code"
+                    />
+                 </div>
+                 <button 
+                   type="submit" 
+                   disabled={withdrawMut.isPending}
+                   className="w-full py-4 bg-[#780116] text-white rounded-2xl font-black text-lg hover:bg-[#A00320] transition-colors mt-4 shadow-lg disabled:opacity-50 flex justify-center items-center gap-2"
+                 >
+                   {withdrawMut.isPending ? <RefreshCw className="animate-spin" size={20}/> : 'Submit Withdrawal'}
+                 </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

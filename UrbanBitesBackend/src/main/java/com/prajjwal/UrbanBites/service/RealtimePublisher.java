@@ -1,6 +1,7 @@
 package com.prajjwal.UrbanBites.service;
 
 import com.prajjwal.UrbanBites.dto.response.CartResponse;
+import com.prajjwal.UrbanBites.dto.response.DispatchAssignmentResponse;
 import com.prajjwal.UrbanBites.dto.response.DispatchEventResponse;
 import com.prajjwal.UrbanBites.dto.response.NotificationResponse;
 import com.prajjwal.UrbanBites.dto.response.OrderResponse;
@@ -70,7 +71,7 @@ public class RealtimePublisher {
 		messagingTemplate.convertAndSend("/topic/owners/" + ownerId + "/orders", event);
 	}
 
-	public void publishAgentOffer(Long agentUserId, String eventType, DispatchEventResponse snapshot) {
+	public void publishAgentOffer(Long agentUserId, String eventType, DispatchAssignmentResponse snapshot) {
 		if (agentUserId == null) {
 			return;
 		}

@@ -496,9 +496,9 @@ export default function ManageRestaurants() {
                       <input type="file" accept="image/*" onChange={(e) => setEditForm(p => ({...p, imageFile: e.target.files[0]}))} className="w-full bg-white/80 backdrop-blur-md border-2 border-white shadow-sm text-[#780116] rounded-2xl py-2.5 px-4 text-xs font-bold file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-[#FDF9F1] file:text-[#F7B538] hover:file:bg-[#F7B538]/20 cursor-pointer transition-all" />
                     </div>
 
-                    {zones && zones.length > 0 && (
-                      <div className="pt-4 mt-2 border-t border-[#EADDCD]/60 border-dashed">
-                        <label className="block text-[10px] uppercase tracking-widest font-black text-[#8E7B73] mb-3 ml-1">Service Zones (Quick Assign)</label>
+                    <div className="pt-4 mt-2 border-t border-[#EADDCD]/60 border-dashed">
+                      <label className="block text-[10px] uppercase tracking-widest font-black text-[#8E7B73] mb-3 ml-1">Service Zones (Quick Assign)</label>
+                      {zones && zones.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {zones.map(z => (
                             <div key={z.id} className="bg-white/60 border border-[#EADDCD] p-3 rounded-2xl shadow-sm flex flex-col gap-2">
@@ -514,8 +514,10 @@ export default function ManageRestaurants() {
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="text-[#8E7B73] text-xs font-bold ml-1 bg-[#FDF9F1] border border-[#EADDCD]/50 rounded-xl p-3">No active service zones defined by administrator.</p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex gap-3 pt-5 border-t border-[#EADDCD]/60 border-dashed">

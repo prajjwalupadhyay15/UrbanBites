@@ -14,7 +14,12 @@ public record AdminDisputeCaseResponse(
         String resolutionNote,
         String createdBy,
         OffsetDateTime createdAt,
-        OffsetDateTime resolvedAt
+        OffsetDateTime resolvedAt,
+        String imageUrl,
+        String restaurantName,
+        String orderItemsSummary,
+        String orderTotal,
+        String userName
 ) {
 }
 

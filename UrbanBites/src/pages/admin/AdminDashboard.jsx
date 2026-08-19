@@ -8,13 +8,15 @@ import {
   Users, Store, ShoppingBag, TrendingUp, AlertTriangle, Ticket,
   ToggleLeft, ToggleRight, CheckCircle2, XCircle, RefreshCw,
   ChevronRight, Shield, Clock, DollarSign, Bike, Tag,
-  MessageSquare, Settings, Activity, FileText, MapPin
+  MessageSquare, Settings, Activity, FileText, MapPin, Plus, HeadphonesIcon
 } from 'lucide-react';
 
 import FinanceTab from './tabs/FinanceTab';
 import OperationsTab from './tabs/OperationsTab';
 import ModerationTab from './tabs/ModerationTab';
 import ZonesTab from './tabs/ZonesTab';
+import DisputesTab from './tabs/DisputesTab';
+import WithdrawalsTab from './tabs/WithdrawalsTab';
 
 /* ─── Stat Card ─────────────────────────────────────────────── */
 function StatCard({ label, value, icon: Icon, color, delay = 0 }) {
@@ -172,138 +174,11 @@ function RestaurantsTab() {
   );
 }
 
-/* ─── Disputes Tab ──────────────────────────────────────────── */
-function DisputesTab() {
-  const qc = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [form, setForm] = useState({ orderId: '', type: 'ORDER', title: '', description: '' });
-
-  const { data: disputes = [], isLoading } = useQuery({
-    queryKey: ['admin-disputes'],
-    queryFn: () => adminApi.getDisputes(),
-    staleTime: 1000 * 30,
-  });
-
-  const createMut = useMutation({
-    mutationFn: (data) => adminApi.createDispute(data),
-    onSuccess: () => {
-      toast.success('Dispute created');
-      qc.invalidateQueries(['admin-disputes']);
-      setIsModalOpen(false);
-      setForm({ orderId: '', type: 'ORDER', title: '', description: '' });
-    },
-    onError: () => toast.error('Failed to create dispute'),
-  });
-
-  const STATUS_COLOR = {
-    OPEN: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-    RESOLVED: 'bg-green-50 text-green-700 border-green-200',
-    CLOSED: 'bg-[#FDF9F1] text-[#8E7B73] border-[#EADDCD]',
-  };
-
-  if (isLoading) return <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-[#EADDCD]/30 rounded-2xl animate-pulse" />)}</div>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2.5 bg-gradient-to-r from-[#780116] to-[#A00320] text-white text-sm font-black rounded-xl shadow-premium hover:-translate-y-0.5 transition-all flex items-center gap-2"
-        >
-          <AlertTriangle size={14} /> New Dispute
-        </button>
-      </div>
-      <div className="space-y-3">
-      {disputes.map((d, i) => (
-        <motion.div
-          key={d.id}
-          initial={{ opacity: 0, x: -8 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: i * 0.03 }}
-          className="flex items-center gap-4 px-5 py-4 bg-white hover:bg-[#FDF9F1] border border-[#EADDCD] rounded-2xl transition-colors shadow-sm"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-yellow-50 border border-yellow-200 flex items-center justify-center shrink-0">
-            <AlertTriangle size={16} className="text-yellow-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[#780116] font-bold text-sm">Dispute #{d.id}</p>
-            <p className="text-[#8E7B73] text-xs truncate">{d.reason || d.description || 'No reason provided'}</p>
-          </div>
-          <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border shrink-0 ${STATUS_COLOR[d.status] || STATUS_COLOR.CLOSED}`}>
-            {d.status || 'UNKNOWN'}
-          </span>
-        </motion.div>
-      ))}
-      {disputes.length === 0 && (
-        <div className="py-16 text-center bg-white border border-dashed border-[#EADDCD] rounded-[2.5rem] shadow-sm">
-          <div className="text-4xl mb-3">✅</div>
-          <p className="text-[#780116] font-black">No open disputes</p>
-          <p className="text-[#8E7B73] text-sm font-medium mt-1">Platform is running smoothly.</p>
-        </div>
-      )}
-      </div>
-
-      <AnimatePresence>
-        {isModalOpen && (
-          <motion.div
-             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#780116]/20 backdrop-blur-sm"
-          >
-             <motion.div
-               initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
-               className="w-full max-w-md bg-white border border-[#EADDCD] rounded-3xl p-6 shadow-premium"
-             >
-               <div className="flex items-center justify-between mb-5">
-                 <div>
-                   <h3 className="text-[#780116] font-black text-lg">Create Dispute</h3>
-                   <p className="text-[#8E7B73] text-xs font-bold">Manually log an administrative dispute.</p>
-                 </div>
-                 <button onClick={() => setIsModalOpen(false)} className="text-[#8E7B73] hover:text-[#780116] transition-colors"><XCircle size={20}/></button>
-               </div>
-
-               <div className="space-y-4">
-                 <div>
-                   <label className="block text-[10px] font-black uppercase text-[#8E7B73] mb-1.5 ml-1">Order ID</label>
-                   <input type="number" value={form.orderId} onChange={e => setForm(p => ({...p, orderId: e.target.value}))} className="w-full bg-[#FFFCF5] border border-[#EADDCD] text-[#780116] text-sm rounded-2xl p-3 font-bold outline-none focus:border-[#F7B538]" />
-                 </div>
-                 <div>
-                   <label className="block text-[10px] font-black uppercase text-[#8E7B73] mb-1.5 ml-1">Type</label>
-                   <select value={form.type} onChange={e => setForm(p => ({...p, type: e.target.value}))} className="w-full bg-[#FFFCF5] border border-[#EADDCD] text-[#780116] text-sm rounded-2xl p-3 font-bold outline-none focus:border-[#F7B538]">
-                     <option value="ORDER">ORDER</option>
-                     <option value="PAYMENT">PAYMENT</option>
-                     <option value="DELIVERY">DELIVERY</option>
-                     <option value="REVIEW">REVIEW</option>
-                     <option value="OTHER">OTHER</option>
-                   </select>
-                 </div>
-                 <div>
-                   <label className="block text-[10px] font-black uppercase text-[#8E7B73] mb-1.5 ml-1">Title</label>
-                   <input type="text" value={form.title} onChange={e => setForm(p => ({...p, title: e.target.value}))} maxLength={160} className="w-full bg-[#FFFCF5] border border-[#EADDCD] text-[#780116] text-sm rounded-2xl p-3 font-bold outline-none focus:border-[#F7B538]" />
-                 </div>
-                 <div>
-                   <label className="block text-[10px] font-black uppercase text-[#8E7B73] mb-1.5 ml-1">Description</label>
-                   <textarea value={form.description} onChange={e => setForm(p => ({...p, description: e.target.value}))} rows={3} maxLength={1200} className="w-full bg-[#FFFCF5] border border-[#EADDCD] text-[#780116] text-sm rounded-2xl p-3 font-bold outline-none focus:border-[#F7B538] resize-none" />
-                 </div>
-               </div>
-
-               <button 
-                 onClick={() => createMut.mutate({ orderId: Number(form.orderId), type: form.type, title: form.title, description: form.description })}
-                 disabled={createMut.isLoading || !form.orderId || !form.title || !form.description}
-                 className="w-full mt-6 py-3 bg-gradient-to-r from-[#780116] to-[#A00320] text-white font-black text-sm rounded-2xl shadow-premium disabled:opacity-50 hover:-translate-y-0.5 transition-all"
-               >
-                 Submit Dispute
-               </button>
-             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 /* ─── Coupons Tab ───────────────────────────────────────────── */
 function CouponsTab() {
   const qc = useQueryClient();
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const { data: coupons = [], isLoading } = useQuery({
     queryKey: ['admin-coupons'],
     queryFn: adminApi.getCouponCampaigns,
@@ -319,6 +194,16 @@ function CouponsTab() {
 
   return (
     <div className="space-y-3">
+      <div className="flex justify-between items-center mb-4 px-2">
+        <h3 className="text-[#780116] font-black text-lg">Active Campaigns</h3>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-[#780116] text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-[#5a0010] transition-colors flex items-center gap-2"
+        >
+          <Plus size={16} /> Create Campaign
+        </button>
+      </div>
+
       {coupons.map((c, i) => (
         <motion.div
           key={c.id}
@@ -331,11 +216,11 @@ function CouponsTab() {
             <Tag size={16} className="text-[#F7B538]" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[#780116] font-black text-sm font-mono tracking-wider">{c.code || c.couponCode}</p>
+            <p className="text-[#780116] font-black text-sm font-mono tracking-wider">{c.code}</p>
             <p className="text-[#8E7B73] text-xs">
-              {c.discountType === 'PERCENTAGE' ? `${c.discountValue}% off` : `₹${c.discountValue} off`}
-              {c.maxUsage ? ` · Max ${c.maxUsage} uses` : ''}
-              {c.expiresAt ? ` · Expires ${new Date(c.expiresAt).toLocaleDateString('en-IN')}` : ''}
+              {c.discountPercent}% off
+              {c.maxUses ? ` · Max ${c.maxUses} uses` : ''}
+              {c.endsAt ? ` · Expires ${new Date(c.endsAt).toLocaleDateString('en-IN')}` : ''}
             </p>
           </div>
           <button
@@ -354,6 +239,146 @@ function CouponsTab() {
       {coupons.length === 0 && (
         <div className="py-12 text-center text-[#8E7B73] font-medium">No coupon campaigns yet.</div>
       )}
+
+      {/* Create Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <CreateCouponModal onClose={() => setIsModalOpen(false)} />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function CreateCouponModal({ onClose }) {
+  const qc = useQueryClient();
+  const [formData, setFormData] = useState({
+    code: '',
+    description: '',
+    discountPercent: '',
+    maxUses: '',
+    startsAt: '',
+    endsAt: '',
+  });
+
+  const mutation = useMutation({
+    mutationFn: adminApi.createCouponCampaign,
+    onSuccess: () => {
+      toast.success('Campaign created successfully!');
+      qc.invalidateQueries(['admin-coupons']);
+      onClose();
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Failed to create campaign');
+    },
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const payload = {
+      ...formData,
+      discountPercent: Number(formData.discountPercent),
+      maxUses: formData.maxUses ? Number(formData.maxUses) : null,
+      startsAt: formData.startsAt ? new Date(formData.startsAt).toISOString() : new Date().toISOString(),
+      endsAt: formData.endsAt ? new Date(formData.endsAt).toISOString() : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      active: true,
+    };
+    mutation.mutate(payload);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2A0800]/40 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white rounded-[2rem] shadow-premium max-w-lg w-full max-h-[90vh] overflow-y-auto"
+      >
+        <div className="p-6 border-b border-[#EADDCD] flex justify-between items-center sticky top-0 bg-white z-10 rounded-t-[2rem]">
+          <h2 className="text-2xl font-black text-[#780116] font-display">New Campaign</h2>
+          <button onClick={onClose} className="p-2 hover:bg-[#FDF9F1] rounded-full text-[#8E7B73] transition-colors">
+            <XCircle size={24} />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-black text-[#8E7B73] uppercase tracking-wider">Coupon Code</label>
+            <input
+              type="text"
+              required
+              value={formData.code}
+              onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+              placeholder="e.g. SUMMER20"
+              className="w-full bg-white border border-[#EADDCD] rounded-2xl px-4 py-3 font-bold text-[#780116] focus:border-[#F7B538] outline-none"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-black text-[#8E7B73] uppercase tracking-wider">Description</label>
+            <input
+              type="text"
+              required
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full bg-white border border-[#EADDCD] rounded-2xl px-4 py-3 text-sm font-bold text-[#2A0800] focus:border-[#F7B538] outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-black text-[#8E7B73] uppercase tracking-wider">Discount (%)</label>
+              <input
+                type="number"
+                required
+                min="0.01"
+                max="100"
+                step="0.01"
+                value={formData.discountPercent}
+                onChange={(e) => setFormData({ ...formData, discountPercent: e.target.value })}
+                className="w-full bg-white border border-[#EADDCD] rounded-2xl px-4 py-3 text-sm font-bold text-[#2A0800] focus:border-[#F7B538] outline-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-black text-[#8E7B73] uppercase tracking-wider">Max Uses</label>
+              <input
+                type="number"
+                min="1"
+                value={formData.maxUses}
+                onChange={(e) => setFormData({ ...formData, maxUses: e.target.value })}
+                placeholder="Unlimited"
+                className="w-full bg-white border border-[#EADDCD] rounded-2xl px-4 py-3 text-sm font-bold text-[#2A0800] focus:border-[#F7B538] outline-none"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-black text-[#8E7B73] uppercase tracking-wider">Starts At</label>
+              <input
+                type="datetime-local"
+                required
+                value={formData.startsAt}
+                onChange={(e) => setFormData({ ...formData, startsAt: e.target.value })}
+                className="w-full bg-white border border-[#EADDCD] rounded-2xl px-4 py-3 text-sm font-bold text-[#2A0800] focus:border-[#F7B538] outline-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-black text-[#8E7B73] uppercase tracking-wider">Ends At</label>
+              <input
+                type="datetime-local"
+                required
+                value={formData.endsAt}
+                onChange={(e) => setFormData({ ...formData, endsAt: e.target.value })}
+                className="w-full bg-white border border-[#EADDCD] rounded-2xl px-4 py-3 text-sm font-bold text-[#2A0800] focus:border-[#F7B538] outline-none"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="w-full bg-[#780116] text-white font-black py-4 rounded-2xl mt-4 hover:bg-[#5a0010] transition-colors disabled:opacity-50"
+          >
+            {mutation.isPending ? 'Creating...' : 'Create Campaign'}
+          </button>
+        </form>
+      </motion.div>
     </div>
   );
 }
@@ -718,8 +743,11 @@ const TABS = [
   { id: 'approvals', label: 'Approvals', icon: Shield },
   { id: 'moderation', label: 'Moderation', icon: MessageSquare },
   { id: 'disputes', label: 'Disputes', icon: AlertTriangle },
+  { id: 'withdrawals', label: 'Withdrawals', icon: DollarSign },
   { id: 'coupons', label: 'Coupons', icon: Ticket },
   { id: 'zones', label: 'Zones', icon: MapPin },
+  { id: 'marketing', label: 'Marketing', icon: Tag },
+  { id: 'settings', label: 'Settings', icon: Settings }
 ];
 
 export default function AdminDashboard() {
@@ -784,11 +812,12 @@ export default function AdminDashboard() {
 
       {/* Overview Stats */}
       {(activeTab === 'overview' || true) && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
           <StatCard label="Total Users" value={dash?.totalUsers ?? (dashLoading ? undefined : '—')} icon={Users} color="bg-blue-400/80" delay={0} />
           <StatCard label="Restaurants" value={dash?.totalRestaurants ?? (dashLoading ? undefined : '—')} icon={Store} color="bg-[#F7B538]/80" delay={0.05} />
           <StatCard label="Total Orders" value={dash?.totalOrders ?? (dashLoading ? undefined : '—')} icon={ShoppingBag} color="bg-green-400/80" delay={0.1} />
           <StatCard label="Platform Revenue" value={dash?.capturedRevenue != null ? `₹${Number(dash.capturedRevenue).toLocaleString('en-IN')}` : (dashLoading ? undefined : '₹0')} icon={DollarSign} color="bg-purple-400/80" delay={0.15} />
+          <StatCard label="Refunds" value={dash?.refundedPayments ?? (dashLoading ? undefined : '—')} icon={RefreshCw} color="bg-red-400/80" delay={0.2} />
         </div>
       )}
 
@@ -845,6 +874,7 @@ export default function AdminDashboard() {
           {activeTab === 'approvals' && <ApprovalsTab />}
           {activeTab === 'moderation' && <ModerationTab />}
           {activeTab === 'disputes' && <DisputesTab />}
+          {activeTab === 'withdrawals' && <WithdrawalsTab />}
           {activeTab === 'coupons' && <CouponsTab />}
           {activeTab === 'zones' && <ZonesTab />}
         </motion.div>
@@ -898,8 +928,14 @@ function DisputesPreview() {
       {disputes.slice(0, 5).map((d) => (
         <div key={d.id} className="flex items-center gap-3 px-4 py-3 bg-[#FFFCF5] border border-[#EADDCD] shadow-sm rounded-xl hover:border-[#F7B538] transition-colors">
           <AlertTriangle size={14} className="text-yellow-600 shrink-0" />
-          <span className="text-[#780116] font-black text-sm flex-1 truncate">Dispute #{d.id}</span>
-          <span className="text-yellow-600 text-xs font-black">{d.status}</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-[#780116] font-black text-sm block truncate">Dispute #{d.id}</span>
+            <span className="text-[#8E7B73] text-xs truncate block">{d.reason || d.description || 'No reason provided'}</span>
+          </div>
+          {d.imageUrl && (
+            <img src={d.imageUrl.startsWith('http') ? d.imageUrl : `http://localhost:8081${d.imageUrl}`} alt="Evidence" className="h-8 w-8 rounded-lg object-cover border border-[#EADDCD] shrink-0" />
+          )}
+          <span className="text-yellow-600 text-xs font-black shrink-0">{d.status}</span>
         </div>
       ))}
     </div>

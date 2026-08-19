@@ -37,4 +37,22 @@ export const cartApi = {
     const res = await apiClient.post('/api/v1/cart/checkout-preview', payload);
     return res.data;
   },
+
+  /** POST /api/v1/cart/apply-coupon — { couponCode } → CouponResponse */
+  applyCoupon: async (couponCode) => {
+    const res = await apiClient.post('/api/v1/cart/apply-coupon', { couponCode });
+    return res.data;
+  },
+
+  /** DELETE /api/v1/cart/remove-coupon → CouponResponse */
+  removeCoupon: async () => {
+    const res = await apiClient.delete('/api/v1/cart/remove-coupon');
+    return res.data;
+  },
+
+  /** GET /api/v1/cart/coupons/available → List<CouponResponse> */
+  getAvailableCoupons: async () => {
+    const res = await apiClient.get('/api/v1/cart/coupons/available');
+    return res.data;
+  },
 };

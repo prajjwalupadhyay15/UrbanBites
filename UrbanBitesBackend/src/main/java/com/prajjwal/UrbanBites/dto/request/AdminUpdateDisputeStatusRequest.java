@@ -6,7 +6,8 @@ import jakarta.validation.constraints.Size;
 
 public record AdminUpdateDisputeStatusRequest(
         @NotNull AdminDisputeStatus status,
-        @Size(max = 1200) String resolutionNote
+        @Size(max = 1200) String resolutionNote,
+        String refundTarget
 ) {
 }
 

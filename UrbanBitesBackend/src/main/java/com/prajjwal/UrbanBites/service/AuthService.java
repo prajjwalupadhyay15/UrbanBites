@@ -31,11 +31,15 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -272,15 +276,19 @@ public class AuthService {
         if (!isEmailableAddress(user.getEmail())) {
             return;
         }
-        if (Role.RESTAURANT_OWNER.equals(user.getRole())) {
-            emailSender.sendPartnerSignupEmail(user.getEmail(), user.getFullName(), "Restaurant Partner");
-            return;
+        try {
+            if (Role.RESTAURANT_OWNER.equals(user.getRole())) {
+                emailSender.sendPartnerSignupEmail(user.getEmail(), user.getFullName(), "Restaurant Partner");
+                return;
+            }
+            if (Role.DELIVERY_AGENT.equals(user.getRole())) {
+                emailSender.sendPartnerSignupEmail(user.getEmail(), user.getFullName(), "Delivery Agent");
+                return;
+            }
+            emailSender.sendWelcomeEmail(user.getEmail(), user.getFullName());
+        } catch (Exception ex) {
+            log.warn("Failed to send welcome email to: {}", user.getEmail(), ex);
         }
-        if (Role.DELIVERY_AGENT.equals(user.getRole())) {
-            emailSender.sendPartnerSignupEmail(user.getEmail(), user.getFullName(), "Delivery Agent");
-            return;
-        }
-        emailSender.sendWelcomeEmail(user.getEmail(), user.getFullName());
     }
 
     @Transactional
@@ -340,14 +348,18 @@ public class AuthService {
         );
 
         if (unknownContext && isEmailableAddress(user.getEmail())) {
-            emailSender.sendUnknownLoginAlert(
-                    user.getEmail(),
-                    user.getFullName(),
-                    normalizeText(context.ipAddress(), "Unknown IP"),
-                    normalizeText(context.locationLabel(), "Unknown location"),
-                    normalizeText(context.userAgent(), "Unknown device"),
-                    LOGIN_TIME_FORMAT.format(context.loggedInAt())
-            );
+            try {
+                emailSender.sendUnknownLoginAlert(
+                        user.getEmail(),
+                        user.getFullName(),
+                        normalizeText(context.ipAddress(), "Unknown IP"),
+                        normalizeText(context.locationLabel(), "Unknown location"),
+                        normalizeText(context.userAgent(), "Unknown device"),
+                        LOGIN_TIME_FORMAT.format(context.loggedInAt())
+                );
+            } catch (Exception ex) {
+                log.warn("Failed to send unknown login alert email to: {}", user.getEmail(), ex);
+            }
         }
 
         updateLastLoginMetadata(user, context);

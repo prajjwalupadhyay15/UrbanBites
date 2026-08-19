@@ -134,11 +134,19 @@ function MenuCard({ item, onEdit, onDelete }) {
           <span className="text-[#2A0800] font-black text-base">₹{item.price}</span>
           <span
             className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${item.available
+                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                : 'bg-gray-50 text-gray-600 border-gray-200'
+              }`}
+          >
+            {item.available ? 'Visible' : 'Hidden'}
+          </span>
+          <span
+            className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${item.inStock
                 ? 'bg-green-50 text-green-600 border-green-200'
                 : 'bg-red-50 text-red-600 border-red-200'
               }`}
           >
-            {item.available ? 'Available' : 'Unavailable'}
+            {item.inStock ? 'In Stock' : 'Out of Stock'}
           </span>
         </div>
       </div>
@@ -156,6 +164,7 @@ function MenuItemForm({ restaurantId, editItem, onClose, onSuccess }) {
         price: String(editItem.price || ''),
         veg: editItem.veg ?? true,
         available: editItem.available ?? true,
+        inStock: editItem.inStock ?? true,
         category: editItem.category || '',
       }
       : EMPTY_FORM
@@ -232,6 +241,7 @@ function MenuItemForm({ restaurantId, editItem, onClose, onSuccess }) {
     fd.append('price', parseFloat(form.price));
     fd.append('veg', form.veg);
     fd.append('available', form.available);
+    fd.append('inStock', form.inStock);
     if (form.category) fd.append('category', form.category);
     if (imageFile) fd.append('image', imageFile);
     // If editing with no new image, backend accepts optional image
@@ -410,7 +420,7 @@ function MenuItemForm({ restaurantId, editItem, onClose, onSuccess }) {
             {/* Availability */}
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-[#8E7B73] block mb-2">
-                Availability
+                Visibility
               </label>
               <button
                 type="button"
@@ -419,9 +429,27 @@ function MenuItemForm({ restaurantId, editItem, onClose, onSuccess }) {
                   ${form.available ? 'bg-[#FDF9F1] border-[#EADDCD] text-[#F7B538]' : 'bg-white border-[#EADDCD] text-[#8E7B73]'}`}
               >
                 <span className="text-sm font-black">
-                  {form.available ? 'Available' : 'Unavailable'}
+                  {form.available ? 'Visible' : 'Hidden'}
                 </span>
                 {form.available ? <ToggleRight size={22} className="text-[#F7B538]" /> : <ToggleLeft size={22} />}
+              </button>
+            </div>
+
+            {/* In Stock */}
+            <div className="col-span-2 sm:col-span-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-[#8E7B73] block mb-2">
+                Stock Status
+              </label>
+              <button
+                type="button"
+                onClick={() => set('inStock', !form.inStock)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border transition-all shadow-sm
+                  ${form.inStock ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-600'}`}
+              >
+                <span className="text-sm font-black">
+                  {form.inStock ? 'In Stock' : 'Out of Stock'}
+                </span>
+                {form.inStock ? <ToggleRight size={22} className="text-green-600" /> : <ToggleLeft size={22} className="text-red-600" />}
               </button>
             </div>
           </div>

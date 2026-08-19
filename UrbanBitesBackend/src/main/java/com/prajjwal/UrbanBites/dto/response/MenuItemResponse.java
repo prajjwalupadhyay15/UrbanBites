@@ -11,7 +11,10 @@ public record MenuItemResponse(
         String imagePath,
         boolean veg,
         boolean available,
-        String category
+        boolean inStock,
+        String category,
+        BigDecimal averageRating,
+        Integer reviewCount
 ) {
 }
 

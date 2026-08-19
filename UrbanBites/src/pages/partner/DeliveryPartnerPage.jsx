@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import { authApi } from '../../api/authApi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, User, AlertCircle, Phone, ArrowLeft, ArrowRight, Bike, Eye, EyeOff, Map, Navigation, ShieldCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 function OtpDigitInput({ value, onChange, onKeyDown, inputRef }) {
   return (
@@ -90,9 +91,15 @@ export default function DeliveryPartnerPage() {
     if (!validateEmail()) return;
     try {
       await register({ fullName: formData.fullName, email: formData.email, password: formData.password, role: 'DELIVERY_AGENT' });
-      await authApi.requestEmailVerificationOtp();
       setStep(3);
-    } catch (err) { }
+      try { 
+        await authApi.requestEmailVerificationOtp(); 
+      } catch (err) {
+        toast.error('Failed to send OTP. You can request a new one below.');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Registration failed');
+    }
   };
 
   const handleOtpChange = (index, value) => {

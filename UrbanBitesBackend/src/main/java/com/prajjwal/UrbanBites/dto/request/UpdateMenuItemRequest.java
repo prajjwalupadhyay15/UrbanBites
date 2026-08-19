@@ -8,6 +8,7 @@ public record UpdateMenuItemRequest(
         BigDecimal price,
         boolean veg,
         boolean available,
+        boolean inStock,
         String category
 ) {
 }

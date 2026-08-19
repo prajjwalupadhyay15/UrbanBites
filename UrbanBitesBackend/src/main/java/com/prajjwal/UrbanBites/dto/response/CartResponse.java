@@ -9,7 +9,8 @@ public record CartResponse(
         String restaurantName,
         int totalItems,
         BigDecimal subtotal,
-        List<CartItemResponse> items
+        List<CartItemResponse> items,
+        String appliedCouponCode
 ) {
 }
 

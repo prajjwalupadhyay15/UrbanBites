@@ -28,17 +28,20 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final OtpVerificationAccessFilter otpVerificationAccessFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final CustomUserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
     private final List<String> allowedOrigins;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
                           OtpVerificationAccessFilter otpVerificationAccessFilter,
+                          RateLimitingFilter rateLimitingFilter,
                           CustomUserDetailsService userDetailsService,
                           PasswordEncoder passwordEncoder,
                           @Value("${app.websocket.allowed-origins:http://localhost:5173}") String allowedOrigins) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.otpVerificationAccessFilter = otpVerificationAccessFilter;
+        this.rateLimitingFilter = rateLimitingFilter;
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
@@ -83,6 +86,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(otpVerificationAccessFilter, JwtAuthenticationFilter.class);
 

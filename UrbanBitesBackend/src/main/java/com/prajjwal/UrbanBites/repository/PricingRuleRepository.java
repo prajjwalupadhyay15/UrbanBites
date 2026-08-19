@@ -8,6 +8,8 @@ public interface PricingRuleRepository extends JpaRepository<PricingRule, Long> 
 
     Optional<PricingRule> findTopByActiveTrueOrderByVersionDesc();
 
+    Optional<PricingRule> findByVersion(String version);
+
     boolean existsByVersionIgnoreCase(String version);
 }
 

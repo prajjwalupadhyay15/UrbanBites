@@ -9,6 +9,7 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import CartDrawer from './components/layout/CartDrawer';
 import CartFloatingBar from './components/specific/CartFloatingBar';
+import ChatbotWidget from './components/specific/ChatbotWidget';
 import PartnerGateway from './pages/partner/PartnerGateway';
 import RestaurantPartnerPage from './pages/partner/RestaurantPartnerPage';
 import DeliveryPartnerPage from './pages/partner/DeliveryPartnerPage';
@@ -33,6 +34,7 @@ const ConsumerLayout = () => (
   <div className="min-h-screen flex flex-col font-sans bg-[#FFFCF5] text-[#2A0800]">
     <Navbar />
     <CartFloatingBar />
+    <ChatbotWidget />
     <main className="flex-1 flex flex-col">
       <Outlet />
     </main>

@@ -31,9 +31,13 @@ export default function RestaurantCard({ restaurant }) {
     return (3.8 + (seed * 0.37) % 1.2).toFixed(1);
   }, [id]);
   const eta = useMemo(() => {
+    if (distanceKm != null && distanceKm > 0) {
+      // 15 mins prep time + 4 mins per km average travel time in city traffic
+      return Math.round(15 + (distanceKm * 4));
+    }
     const seed = Number(id) || 1;
     return 20 + (seed * 7) % 26;
-  }, [id]);
+  }, [id, distanceKm]);
 
   const isClosed = !openNow;
 
@@ -83,7 +87,7 @@ export default function RestaurantCard({ restaurant }) {
 
           {/* Bottom info on image */}
           <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
-            {distanceKm && (
+            {distanceKm != null && (
               <span className="flex items-center gap-1 bg-[#2A0800]/60 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full">
                 <MapPin size={11} className="text-[#F7B538]" />
                 {distanceKm.toFixed(1)} km

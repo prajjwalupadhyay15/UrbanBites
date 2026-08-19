@@ -17,6 +17,18 @@ public class PricingEngineService {
             boolean peakDemand,
             boolean raining
     ) {
+        return preview(rule, subtotal, itemLevelPackingTotal, distanceKm, peakDemand, raining, BigDecimal.ZERO);
+    }
+
+    public FeeBreakupResponse preview(
+            PricingRule rule,
+            BigDecimal subtotal,
+            BigDecimal itemLevelPackingTotal,
+            BigDecimal distanceKm,
+            boolean peakDemand,
+            boolean raining,
+            BigDecimal discount
+    ) {
         BigDecimal surgeMultiplier = BigDecimal.ONE;
         if (peakDemand) {
             surgeMultiplier = surgeMultiplier.multiply(rule.getSurgePeakMultiplier());
@@ -52,13 +64,13 @@ public class PricingEngineService {
         BigDecimal taxableBase = subtotal.add(deliveryFee).add(packingCharge).add(platformFee);
         BigDecimal tax = percentage(taxableBase, rule.getTaxPercent());
 
-        BigDecimal discount = BigDecimal.ZERO;
         BigDecimal grandTotal = subtotal
                 .add(deliveryFee)
                 .add(packingCharge)
                 .add(platformFee)
                 .add(tax)
-                .subtract(discount);
+                .subtract(discount)
+                .max(BigDecimal.ZERO);
 
         return new FeeBreakupResponse(
                 rule.getVersion(),

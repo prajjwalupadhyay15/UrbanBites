@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
 import { cartApi } from '../../api/cartApi';
-import { Plus, Minus, Leaf, Drumstick } from 'lucide-react';
+import { Plus, Minus, Leaf, Drumstick, Star } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import CartConflictModal from './CartConflictModal';
@@ -29,7 +29,7 @@ export default function MenuItemCard({ item, restaurantId, restaurantName }) {
 
   const handleAdd = async (e) => {
     e?.stopPropagation();
-    if (!item.available) return;
+    if (!item.available || !item.inStock) return;
     if (!isAuthenticated) {
       navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`);
       return;
@@ -58,7 +58,14 @@ export default function MenuItemCard({ item, restaurantId, restaurantName }) {
         useCartStore.getState().hydrateFromServer(cart);
         toast.success(`${item.name} added to cart`, { id: `cart-${item.id}` });
       } catch (err) {
-        console.error("Failed to sync cart item:", err);
+        if (err.response?.data?.message?.includes("CART_CONFLICT")) {
+           setShowConflict(true);
+           // Revert local optimistic addition
+           removeItem(item.id);
+        } else {
+           console.error("Failed to sync cart item:", err);
+           toast.error(err.response?.data?.message || "Failed to add to cart");
+        }
       } finally {
         setSyncing(false);
       }
@@ -107,7 +114,7 @@ export default function MenuItemCard({ item, restaurantId, restaurantName }) {
         whileHover={{ y: -4, scale: 1.01 }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         className={`relative bg-white border border-[#EADDCD] hover:border-[#F7B538]/50 rounded-3xl p-4 flex gap-4 group transition-colors shadow-sm hover:shadow-glow-orange overflow-visible
-          ${!item.available ? 'opacity-60 grayscale-[0.5]' : ''}`}
+          ${(!item.available || !item.inStock) ? 'opacity-60 grayscale-[0.5]' : ''}`}
       >
         {/* Veg/Non-veg indicator */}
         <div className={`absolute top-4 left-4 z-10 w-5 h-5 rounded border-[1.5px] bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm
@@ -118,12 +125,31 @@ export default function MenuItemCard({ item, restaurantId, restaurantName }) {
         {/* Text Content */}
         <div className="flex-1 flex flex-col min-w-0 pt-6">
           <h3 className="font-black text-[#2A0800] text-lg leading-tight tracking-tight line-clamp-2 mb-1">{item.name}</h3>
-          <p className="text-[#780116] font-black text-base mb-2">₹{Number(item.price).toFixed(0)}</p>
+          
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-[#780116] font-black text-base">₹{Number(item.price).toFixed(0)}</p>
+            {(item.reviewCount || 0) > 0 && (
+              <div className="flex items-center gap-0.5 bg-[#FFF5E5] px-1.5 py-0.5 rounded text-[10px] font-black text-[#8E7B73] border border-[#F7B538]/30">
+                <Star size={10} className="fill-[#F7B538] text-[#F7B538]" />
+                <span className="text-[#2A0800]">{item.averageRating}</span>
+                <span>({item.reviewCount || 0})</span>
+              </div>
+            )}
+            {(item.reviewCount || 0) === 0 && (
+              <div className="bg-[#FFF5E5] px-1.5 py-0.5 rounded text-[10px] font-black text-[#F7B538] border border-[#F7B538]/30 uppercase tracking-wide">
+                New
+              </div>
+            )}
+          </div>
+
           <p className="text-[#8E7B73] text-xs font-bold leading-relaxed line-clamp-2 mt-auto">
             {item.description || 'Freshly prepared with premium ingredients and served hot.'}
           </p>
           {!item.available && (
             <span className="mt-2 text-[10px] font-black text-red-500 uppercase tracking-widest bg-red-50 w-fit px-2 py-0.5 rounded-full">Unavailable</span>
+          )}
+          {item.available && !item.inStock && (
+            <span className="mt-2 text-[10px] font-black text-red-500 uppercase tracking-widest bg-red-50 w-fit px-2 py-0.5 rounded-full">Out of Stock</span>
           )}
         </div>
 
@@ -176,8 +202,8 @@ export default function MenuItemCard({ item, restaurantId, restaurantName }) {
                   </motion.span>
                   <button
                     onClick={handleAdd}
-                    disabled={!item.available}
-                    className="w-9 h-full flex items-center justify-center text-[#780116] hover:bg-[#FDF9F1] active:bg-[#F7B538]/20 transition-colors"
+                    disabled={!item.available || !item.inStock}
+                    className="w-9 h-full flex items-center justify-center text-[#780116] hover:bg-[#FDF9F1] active:bg-[#F7B538]/20 transition-colors disabled:opacity-40"
                   >
                     <Plus size={16} strokeWidth={3} />
                   </button>
@@ -191,7 +217,7 @@ export default function MenuItemCard({ item, restaurantId, restaurantName }) {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleAdd}
-                  disabled={!item.available}
+                  disabled={!item.available || !item.inStock}
                   className="bg-white border-2 border-[#EADDCD] hover:border-[#F7B538] hover:bg-[#FFFCF5] text-[#780116] font-black text-sm tracking-wide rounded-xl shadow-md px-5 h-10 flex items-center gap-1.5 transition-all hover:shadow-glow-orange disabled:opacity-40 disabled:cursor-not-allowed group-hover:border-[#F7B538]"
                 >
                   ADD <Plus size={14} strokeWidth={3} />

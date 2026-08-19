@@ -158,10 +158,9 @@ export default function OrderTrackingPage() {
       stompClient.subscribe(`/topic/orders/${id}/status`, (message) => {
         if (message.body) {
           const event = JSON.parse(message.body);
-          if (event.payload) {
-            // Directly overwrite the react-query cache for instant UI refresh
-            qc.setQueryData(['order', id], event.payload);
-
+          if (event.snapshot) {
+            // Optimistically update React Query cache
+            qc.setQueryData(['order', id], event.snapshot);
             // Also optionally trigger a refetch just to be perfectly synced
             qc.invalidateQueries({ queryKey: ['order', id] });
             // Invalidate tracking snapshot as well in case status caused delivery completion
@@ -555,7 +554,7 @@ export default function OrderTrackingPage() {
             </div>
 
             {/* Order Items & Delivery Address Toggle */}
-            <details className="group border border-[#EADDCD] rounded-2xl bg-white shadow-sm overflow-hidden mb-8">
+            <details open className="group border border-[#EADDCD] rounded-2xl bg-white shadow-sm overflow-hidden mb-8">
               <summary className="flex items-center justify-between p-4 cursor-pointer font-black text-[#780116] list-none select-none">
                 <div className="flex items-center gap-3">
                   <Package size={20} className="text-[#F7B538]" />

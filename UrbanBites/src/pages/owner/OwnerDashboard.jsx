@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
@@ -8,13 +8,16 @@ import { useAuthStore } from '../../store/authStore';
 import { ownerOrderApi } from '../../api/orderApi';
 import { userApi } from '../../api/userApi';
 import { notificationApi } from '../../api/notificationApi';
+import { restaurantApi } from '../../api/restaurantApi';
+import { reviewApi } from '../../api/reviewApi';
 import toast from 'react-hot-toast';
 import {
   Store, TrendingUp, DollarSign, Clock, ChefHat,
   Package, CheckCircle2, XCircle, Flame,
   ArrowRight, RefreshCw, UtensilsCrossed, BellRing,
-  Wallet, Activity, History, ReceiptText
+  Wallet, Activity, History, ReceiptText, Star, BarChart3
 } from 'lucide-react';
+import PartnerAnalyticsDashboard from '../../components/specific/PartnerAnalyticsDashboard';
 
 const STATUS_CONFIG = {
   CONFIRMED: { label: 'New', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: Package },
@@ -174,10 +177,28 @@ function OrderRow({ order, onAccept, onPreparing, onReady, onCancel, loading }) 
                     <span className="text-[#8E7B73]">Packing Charge</span>
                     <span className="text-[#2A0800] font-black">+₹{order.packingCharge}</span>
                   </div>
+                  {Number(order.deliveryFee) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-[#8E7B73]">Delivery Fee</span>
+                      <span className="text-[#2A0800] font-black">+₹{order.deliveryFee}</span>
+                    </div>
+                  )}
+                  {Number(order.platformFee) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-[#8E7B73]">Platform Fee</span>
+                      <span className="text-[#2A0800] font-black">+₹{order.platformFee}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-[#8E7B73]">Tax (GST)</span>
                     <span className="text-[#2A0800] font-black">+₹{order.taxTotal}</span>
                   </div>
+                  {Number(order.discountTotal) > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span className="font-bold">Discount Applied</span>
+                      <span className="font-black">-₹{order.discountTotal}</span>
+                    </div>
+                  )}
                   <div className="my-3 border-t border-[#EADDCD] border-dashed" />
                   <div className="flex justify-between font-black text-[#780116] text-lg">
                     <span>Grand Total</span>
@@ -230,7 +251,25 @@ export default function OwnerDashboard() {
     staleTime: 1000 * 60,
   });
 
+  const { data: restaurants = [] } = useQuery({
+    queryKey: ['my-restaurants'],
+    queryFn: restaurantApi.getMyRestaurants,
+  });
+
+  const reviewQueries = useQueries({
+    queries: restaurants.map(r => ({
+      queryKey: ['restaurant-reviews', r.id],
+      queryFn: () => reviewApi.getRestaurantReviews(r.id),
+      staleTime: 1000 * 60,
+    }))
+  });
+  
+  const allReviews = reviewQueries.flatMap(q => q.data || []);
+  const averageRating = allReviews.length > 0 ? (allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length).toFixed(1) : 'N/A';
+
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null); // { reviewId, restaurantId }
+  const [replyText, setReplyText] = useState('');
 
   const refetchAll = async () => {
     setIsRefreshing(true);
@@ -301,7 +340,7 @@ export default function OwnerDashboard() {
         if (message.body) {
           const event = JSON.parse(message.body);
           if (event.eventType === 'NEW_ORDER') {
-            setIncomingOrder(event.payload);
+            setIncomingOrder(event.snapshot);
             audioRef.current.play().catch(e => console.log('Audio autoplay blocked by browser', e));
             // Also invalidate query to update dashboard lists in background
             qc.invalidateQueries({ queryKey: ['owner-orders'] });
@@ -406,7 +445,7 @@ export default function OwnerDashboard() {
             { id: 'incoming', label: 'Active Orders', value: incomingOrders.length, icon: Activity, trend: `${incomingOrders.length} new` },
             { id: 'finance', label: 'Net Revenue', value: financeSummary ? `₹${Number(financeSummary.netRevenueAmount).toLocaleString('en-IN')}` : '₹0', icon: Wallet, trend: financeSummary ? `${financeSummary.successfulPayments} payouts` : '...' },
             { id: 'history', label: 'Total Orders', value: financeSummary ? financeSummary.totalOrders : '0', icon: TrendingUp, trend: 'all time' },
-            { id: 'kitchen', label: 'Preparing', value: kitchenOrders.filter(o => o.status === 'PREPARING').length, icon: ChefHat, trend: 'in kitchen' },
+            { id: 'reviews', label: 'Reviews', value: averageRating, icon: Star, trend: `${allReviews.length} total` },
           ].map((stat, i) => (
             <motion.div
               key={i}
@@ -454,7 +493,9 @@ export default function OwnerDashboard() {
                 { id: 'incoming', label: 'Incoming', count: incomingOrders.length, alert: incomingOrders.length > 0 },
                 { id: 'kitchen', label: 'In Kitchen', count: kitchenOrders.length, alert: false },
                 { id: 'history', label: 'History', count: historyOrders.length, alert: false },
-                { id: 'finance', label: 'Finance', count: transactions.length, alert: false }
+                { id: 'finance', label: 'Finance', count: transactions.length, alert: false },
+                { id: 'reviews', label: 'Reviews', count: allReviews.length, alert: false },
+                { id: 'analytics', label: 'Analytics', count: <BarChart3 size={12} />, alert: false }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -482,6 +523,8 @@ export default function OwnerDashboard() {
               [...Array(3)].map((_, i) => (
                 <div key={i} className="h-20 bg-black/5 rounded-[2rem] animate-pulse" />
               ))
+            ) : activeTab === 'analytics' ? (
+              <PartnerAnalyticsDashboard restaurants={restaurants} />
             ) : activeTab === 'finance' ? (
               <div className="space-y-4">
                 {transactions.length === 0 ? (
@@ -508,6 +551,74 @@ export default function OwnerDashboard() {
                         <span className="text-xl font-black text-[#2A0800]">₹{Number(txn.netAmount).toLocaleString('en-IN')}</span>
                         {Number(txn.refundedAmount) > 0 && <span className="text-red-600 text-xs font-bold">Refunded: ₹{txn.refundedAmount}</span>}
                       </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            ) : activeTab === 'reviews' ? (
+              <div className="space-y-4">
+                {allReviews.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <div className="w-20 h-20 mx-auto bg-[#FDF9F1] border border-[#EADDCD] shadow-sm rounded-full flex items-center justify-center mb-5">
+                      <Star size={32} className="text-[#8E7B73]" />
+                    </div>
+                    <h3 className="text-xl font-black text-[#780116] mb-2 font-display">No Reviews Yet</h3>
+                    <p className="text-[#8E7B73] text-sm font-bold">Customer reviews will appear here.</p>
+                  </div>
+                ) : (
+                  allReviews.map(review => (
+                    <motion.div key={review.id} initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className="bg-[#FFFCF5] border border-[#EADDCD] shadow-sm rounded-2xl p-5 flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#780116] font-black text-base">{review.customerName}</span>
+                          <span className="text-[#8E7B73] text-[10px] font-black uppercase tracking-wider bg-white border border-[#EADDCD] px-2 py-0.5 rounded-md">Order #{review.orderId}</span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-[#FDF9F1] border border-[#F7B538]/30 px-2.5 py-1 rounded-full text-[#F7B538] font-black text-sm">
+                          <Star size={14} className="fill-[#F7B538]" /> {review.rating}.0
+                        </div>
+                      </div>
+                      {review.comment && <p className="text-[#2A0800] text-sm font-medium italic">"{review.comment}"</p>}
+                      
+                      {review.ownerReply ? (
+                        <div className="mt-2 bg-[#FDF9F1] border-l-4 border-[#F7B538] p-3 rounded-r-xl">
+                          <p className="text-[#8E7B73] text-[10px] font-black uppercase tracking-wider mb-1">Owner Reply</p>
+                          <p className="text-[#780116] text-sm font-medium">{review.ownerReply}</p>
+                        </div>
+                      ) : replyingTo?.reviewId === review.id ? (
+                        <div className="mt-2 space-y-2">
+                          <textarea
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            placeholder="Write your response..."
+                            className="w-full text-sm rounded-xl border border-[#EADDCD] p-3 outline-none focus:border-[#F7B538] focus:ring-2 focus:ring-[#F7B538]/20 bg-white min-h-[80px]"
+                            maxLength={1000}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => { setReplyingTo(null); setReplyText(''); }}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold text-[#8E7B73] hover:bg-black/5 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => replyMut.mutate({ restaurantId: review.restaurantId, reviewId: review.id, text: replyText })}
+                              disabled={replyMut.isPending || !replyText.trim()}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F7B538] text-[#780116] hover:bg-[#FDF9F1] border border-[#F7B538] transition-all disabled:opacity-50 shadow-sm"
+                            >
+                              {replyMut.isPending ? 'Submitting...' : 'Post Reply'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setReplyingTo({ reviewId: review.id }); setReplyText(''); }}
+                          className="mt-1 self-start px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FDF9F1] border border-[#EADDCD] text-[#780116] hover:border-[#F7B538] hover:text-[#F7B538] transition-all shadow-sm"
+                        >
+                          Reply to Review
+                        </button>
+                      )}
+
+                      <p className="text-[#8E7B73] text-xs font-bold mt-1">{new Date(review.createdAt).toLocaleDateString()}</p>
                     </motion.div>
                   ))
                 )}

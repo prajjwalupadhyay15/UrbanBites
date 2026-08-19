@@ -13,6 +13,7 @@ import {
   Eye, EyeOff, Home, Milestone, Globe, Navigation, Edit2, Flame,
   Pizza, ChefHat, Coffee, CupSoda, Phone
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 // Fix Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -218,8 +219,14 @@ export default function RestaurantPartnerPage() {
         role: 'RESTAURANT_OWNER'
       });
       setStep(4);
-      try { await authApi.requestEmailVerificationOtp(); } catch (e) { }
-    } catch (err) { }
+      try { 
+        await authApi.requestEmailVerificationOtp(); 
+      } catch (e) {
+        toast.error('Failed to send OTP. You can request a new one below.');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Registration failed');
+    }
   };
 
   const handleOtpChange = (index, value) => {

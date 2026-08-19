@@ -9,12 +9,15 @@ export const useLocationStore = create(
       locationName: 'Detecting location…',
       isInitialized: false,
 
+      isManual: false,
+
       setLocation: (lat, lng, name) =>
-        set({ lat, lng, locationName: name, isInitialized: true }),
+        set({ lat, lng, locationName: name, isInitialized: true, isManual: true }),
 
       /** Called once on app startup to detect GPS location */
       initFromGPS: async () => {
-        if (get().isInitialized) return; // already have a saved location
+        if (get().isManual) return; // do not override if user manually selected
+        if (get().isInitialized) return; // already have a saved location for this session
         if (!navigator.geolocation) {
           set({ locationName: 'New Delhi', isInitialized: true });
           return;
@@ -41,6 +44,9 @@ export const useLocationStore = create(
         );
       },
     }),
-    { name: 'ub-location-v1' }
+    { 
+      name: 'ub-location-v1',
+      partialize: (state) => ({ lat: state.lat, lng: state.lng, locationName: state.locationName, isManual: state.isManual }) 
+    }
   )
 );

@@ -54,6 +54,7 @@ export default function LocationPickerModal({ isOpen, onClose, onSelect, current
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
 
@@ -78,6 +79,7 @@ export default function LocationPickerModal({ isOpen, onClose, onSelect, current
 
   // ── Debounced address search via Nominatim ──
   useEffect(() => {
+    setHasSearched(false);
     if (!searchQuery.trim()) {
       setSearchResults([]);
       return;
@@ -88,8 +90,13 @@ export default function LocationPickerModal({ isOpen, onClose, onSelect, current
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5`
         );
-        setSearchResults(await res.json());
-      } catch { setSearchResults([]); }
+        const data = await res.json();
+        setSearchResults(data);
+        setHasSearched(true);
+      } catch { 
+        setSearchResults([]); 
+        setHasSearched(true);
+      }
       finally { setIsSearching(false); }
     }, 500);
     return () => clearTimeout(timer);
@@ -237,6 +244,23 @@ export default function LocationPickerModal({ isOpen, onClose, onSelect, current
                     </div>
                   </button>
                 ))}
+              </motion.div>
+            )}
+            
+            {hasSearched && searchResults.length === 0 && searchQuery.trim() && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="mt-2 bg-[#FFF4F4] border border-[#FFD6D6] rounded-2xl p-4 shadow-lg absolute z-50 left-6 right-6 flex items-start gap-3"
+              >
+                <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                  <MapPin size={16} className="text-red-500" />
+                </div>
+                <div>
+                  <p className="text-red-600 text-sm font-black">We could not locate this address.</p>
+                  <p className="text-red-500/80 text-xs font-bold mt-0.5">Please refine the address or choose map pin</p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

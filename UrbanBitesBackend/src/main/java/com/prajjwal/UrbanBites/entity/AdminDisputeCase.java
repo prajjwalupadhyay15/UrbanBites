@@ -50,6 +50,9 @@ public class AdminDisputeCase {
     @Column(name = "resolution_note", length = 1200)
     private String resolutionNote;
 
+    @Column(name = "image_url", length = 1000)
+    private String imageUrl;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -90,5 +93,7 @@ public class AdminDisputeCase {
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public OffsetDateTime getResolvedAt() { return resolvedAt; }
     public void setResolvedAt(OffsetDateTime resolvedAt) { this.resolvedAt = resolvedAt; }
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
 }
 

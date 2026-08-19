@@ -11,6 +11,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
@@ -33,6 +34,12 @@ public class AdminCouponCampaign {
 
     @Column(name = "max_uses")
     private Integer maxUses;
+
+    @Column(name = "current_uses", nullable = false)
+    private int currentUses = 0;
+
+    @Version
+    private Long version;
 
     @Column(name = "active", nullable = false)
     private boolean active;
@@ -74,6 +81,10 @@ public class AdminCouponCampaign {
     public void setDiscountPercent(BigDecimal discountPercent) { this.discountPercent = discountPercent; }
     public Integer getMaxUses() { return maxUses; }
     public void setMaxUses(Integer maxUses) { this.maxUses = maxUses; }
+    public int getCurrentUses() { return currentUses; }
+    public void setCurrentUses(int currentUses) { this.currentUses = currentUses; }
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
     public OffsetDateTime getStartsAt() { return startsAt; }
